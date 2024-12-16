@@ -1,19 +1,46 @@
 import sqlite3
 import pandas as pd
 
+def ensure_fantasy_columns_exist(conn):
+    """
+    Ensures the fantasy points columns exist in clean_game_logs table
+    """
+    try:
+        # Check if columns exist
+        cursor = conn.execute('SELECT espn_fpts, nba_salary_cap_fpts FROM clean_game_logs LIMIT 1')
+    except sqlite3.OperationalError:
+        print("Adding fantasy points columns to clean_game_logs table...")
+        conn.execute('ALTER TABLE clean_game_logs ADD COLUMN espn_fpts REAL')
+        conn.execute('ALTER TABLE clean_game_logs ADD COLUMN nba_salary_cap_fpts REAL')
+        conn.commit()
+        print("Added fantasy points columns")
+
 def calculate_fantasy_points():
     """
     Add fantasy points calculations to clean_game_logs table:
     - ESPN fantasy points
     - NBA Salary Cap game points
+    Only processes rows that don't already have fantasy points calculated
     """
     conn = sqlite3.connect('nba_stats.db')
     
-    # Read the clean game logs
+    # Ensure fantasy points columns exist
+    ensure_fantasy_columns_exist(conn)
+    
+    # Read only the clean game logs that don't have fantasy points calculated
     query = """
     SELECT * FROM clean_game_logs
+    WHERE espn_fpts IS NULL 
+    OR nba_salary_cap_fpts IS NULL
     """
     df = pd.read_sql_query(query, conn)
+    
+    if df.empty:
+        print("No new games to process")
+        conn.close()
+        return
+    
+    print(f"Calculating fantasy points for {len(df)} new games...")
     
     # Calculate ESPN fantasy points
     df['espn_fpts'] = (
@@ -39,12 +66,27 @@ def calculate_fantasy_points():
         df['TOV'] * -1           # Turnovers
     )
     
-    # Save updated data back to clean_game_logs
-    df.to_sql('clean_game_logs', conn, if_exists='replace', index=False)
+    # Update only the new rows in clean_game_logs
+    for _, row in df.iterrows():
+        update_query = """
+        UPDATE clean_game_logs 
+        SET espn_fpts = ?, nba_salary_cap_fpts = ?
+        WHERE player_url = ? AND G = ?
+        """
+        conn.execute(update_query, (
+            row['espn_fpts'], 
+            row['nba_salary_cap_fpts'],
+            row['player_url'],
+            row['G']
+        ))
     
-    print("Added fantasy points calculations to clean_game_logs:")
-    print("- espn_fpts: ESPN fantasy points")
-    print("- nba_salary_cap_fpts: NBA Salary Cap game points")
+    conn.commit()
+    
+    print(f"Added fantasy points calculations for {len(df)} games")
+    
+    # Refresh the views
+    conn.execute("DROP VIEW IF EXISTS fantasy_averages")
+    conn.execute("DROP VIEW IF EXISTS fantasy_home_away_splits")
     
     # Create fantasy points averages view
     conn.execute("""
@@ -80,7 +122,7 @@ def calculate_fantasy_points():
     ORDER BY (Home_ESPN_FPTS + Away_ESPN_FPTS)/2 DESC
     """)
     
-    print("\nCreated the following views:")
+    print("\nRefreshed the following views:")
     print("- fantasy_averages: Average and max fantasy points for each player")
     print("- fantasy_home_away_splits: Home vs Away fantasy points splits")
     

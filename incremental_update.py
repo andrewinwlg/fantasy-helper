@@ -3,8 +3,8 @@ import sqlite3
 from datetime import datetime
 import time
 from nba_scraper import scrape_player_game_log, get_existing_player_urls
-from post_scraper import process_gamelog_row
-from calc_fpts import calculate_fpts
+from post_scraper import clean_player_game_logs
+from calc_fpts import calculate_fantasy_points
 
 def get_latest_games(conn, player_urls):
     """
@@ -13,14 +13,30 @@ def get_latest_games(conn, player_urls):
     """
     new_games_count = 0
     
-    for player_name, url in player_urls.items():
+    # Get player names from the database for each URL
+    for url in player_urls:
+        # Get player name from the database
+        player_query = """
+        SELECT DISTINCT Player FROM player_stats 
+        WHERE player_url = ?
+        """
+        player_df = pd.read_sql_query(player_query, conn, params=[url])
+        if player_df.empty:
+            print(f"Could not find player name for URL: {url}")
+            continue
+            
+        player_name = player_df.iloc[0]['Player']
         print(f"Checking for new games for {player_name}...")
         
         # Get existing games for this player
         existing_games = pd.read_sql_query(
-            "SELECT player_name, G FROM gamelogs WHERE player_name = ?",
+            """
+            SELECT DISTINCT G 
+            FROM player_game_logs 
+            WHERE player_url = ?
+            """,
             conn,
-            params=[player_name]
+            params=[url]
         )
         
         # Get current games from website
@@ -28,15 +44,29 @@ def get_latest_games(conn, player_urls):
             current_games = scrape_player_game_log(url)
             if current_games is None or current_games.empty:
                 continue
-                
+            
+            # Clean up the current games data
+            current_games = current_games[current_games['G'].notna()]   # Remove any rows without G
+            current_games = current_games[current_games['Rk'].notna()]  # Remove rows where player didn't play
+            current_games = current_games[current_games['Date'] != 'Date']  # Remove header rows
+            
+            # Convert both to integers for comparison
+            existing_game_numbers = set(pd.to_numeric(existing_games['G'], errors='coerce').dropna().astype(int))
+            current_game_numbers = pd.to_numeric(current_games['G'], errors='coerce')
+            
+            print(f"Existing games: {len(existing_game_numbers)}")
+            print(f"Current games: {len(current_games)}")
+            
             # Find new games by comparing game numbers
-            existing_game_numbers = set(existing_games['G'].astype(str))
-            new_games = current_games[~current_games['G'].astype(str).isin(existing_game_numbers)]
+            new_games = current_games[~current_game_numbers.isin(existing_game_numbers)]
             
             if not new_games.empty:
                 print(f"Found {len(new_games)} new games for {player_name}")
-                new_games.to_sql('gamelogs', conn, if_exists='append', index=False)
+                print(f"New game numbers: {new_games['G'].tolist()}")
+                new_games.to_sql('player_game_logs', conn, if_exists='append', index=False)
                 new_games_count += len(new_games)
+            else:
+                print(f"No new games found for {player_name}")
             
             # Don't overwhelm the website
             time.sleep(2)
@@ -49,42 +79,32 @@ def get_latest_games(conn, player_urls):
 
 def process_new_games(conn):
     """
-    Processes only the newly added games through post_scraper and calc_fpts logic
+    Processes newly added games through post_scraper and calc_fpts logic
     """
-    # Get games that haven't been processed yet (no fantasy points calculated)
-    unprocessed_games = pd.read_sql_query(
-        """
-        SELECT * FROM gamelogs 
-        WHERE NOT EXISTS (
-            SELECT 1 FROM fantasy_points 
-            WHERE fantasy_points.player_name = gamelogs.player_name 
-            AND fantasy_points.G = gamelogs.G
-        )
-        """,
+    # First, clean all game logs (including new ones)
+    clean_player_game_logs()
+    
+    # Then calculate fantasy points for all games
+    calculate_fantasy_points()
+    
+    # Count how many new games were processed by comparing the counts
+    before_count = pd.read_sql_query(
+        "SELECT COUNT(*) as count FROM fantasy_points", 
         conn
-    )
+    ).iloc[0]['count']
     
-    if unprocessed_games.empty:
-        return 0
-        
-    print(f"Processing {len(unprocessed_games)} new games...")
+    after_count = pd.read_sql_query(
+        "SELECT COUNT(*) as count FROM clean_game_logs", 
+        conn
+    ).iloc[0]['count']
     
-    # Process each new game
-    for _, row in unprocessed_games.iterrows():
-        processed_row = process_gamelog_row(row)
-        if processed_row is not None:
-            fantasy_points = calculate_fpts(processed_row)
-            
-            # Insert into fantasy_points table
-            fantasy_points.to_sql('fantasy_points', conn, if_exists='append', index=False)
-    
-    return len(unprocessed_games)
+    return after_count - before_count
 
 def main():
     print(f"Starting incremental update at {datetime.now()}")
     
-    # Connect to database
-    conn = sqlite3.connect('fantasy.db')
+    # Connect to database - change from fantasy.db to nba_stats.db
+    conn = sqlite3.connect('nba_stats.db')
     
     # Get player URLs
     player_urls = get_existing_player_urls()

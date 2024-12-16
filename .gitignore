@@ -1,0 +1,10 @@
+# Python bytecode files
+*.pyc
+__pycache__/
+
+# IDE files
+.vscode/
+.idea/ 
+
+# Ignore all files in the 'data' directory
+data/

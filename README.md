@@ -14,13 +14,21 @@ Note that nba_scraper.py takes a long time to run, maybe up to an hour?
 
 This will create the SQLite database with tables and views.
 
+## To update with new data
+
+To fetch only new games since the last update:
+
+```bash
+python incremental_update.py
+```
+
 ## To view the data
 
 You can download any SQLite viewer like [DB Browser for SQLite](https://sqlitebrowser.org/dl/) and use that to view the data in a graphical layout, export to excel, etc.
 
 ## TODOs for this project
 
-- [ ] An incremental data fetcher that only gets new data since the last time it was run
+- [x] An incremental data fetcher that only gets new data since the last time it was run
 - [ ] Present the data in a webpage
 - [ ] Do some basic data science to evaluate who are valuable players
 - [ ] Load your own fantasy team into the database for analysis

@@ -87,18 +87,19 @@ def process_new_games(conn):
     """
     Processes newly added games through post_scraper and calc_fpts logic
     """
+    # Get count before processing
+    before_count = pd.read_sql_query(
+        "SELECT COUNT(*) as count FROM clean_game_logs", 
+        conn
+    ).iloc[0]['count']
+    
     # First, clean all game logs (including new ones)
     clean_player_game_logs()
     
     # Then calculate fantasy points for all games
     calculate_fantasy_points()
     
-    # Count how many new games were processed by comparing the counts
-    before_count = pd.read_sql_query(
-        "SELECT COUNT(*) as count FROM fantasy_points", 
-        conn
-    ).iloc[0]['count']
-    
+    # Get count after processing
     after_count = pd.read_sql_query(
         "SELECT COUNT(*) as count FROM clean_game_logs", 
         conn

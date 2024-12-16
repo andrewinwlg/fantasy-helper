@@ -12,9 +12,12 @@ def get_latest_games(conn, player_urls):
     Returns the number of new games added.
     """
     new_games_count = 0
+    total_players = len(player_urls)
+    current_player = 0
     
     # Get player names from the database for each URL
     for url in player_urls:
+        current_player += 1
         # Get player name from the database
         player_query = """
         SELECT DISTINCT Player FROM player_stats 
@@ -68,6 +71,8 @@ def get_latest_games(conn, player_urls):
             else:
                 print(f"No new games found for {player_name}")
             
+            print(f"Progress: {current_player}/{total_players} players checked")
+            
             # Don't overwhelm the website
             time.sleep(2)
             
@@ -75,6 +80,7 @@ def get_latest_games(conn, player_urls):
             print(f"Error processing {player_name}: {str(e)}")
             continue
     
+    print(f"\nCompleted checking all {total_players} players")
     return new_games_count
 
 def process_new_games(conn):

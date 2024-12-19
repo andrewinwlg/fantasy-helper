@@ -87,11 +87,15 @@ def process_new_games(conn):
     """
     Processes newly added games through post_scraper and calc_fpts logic
     """
-    # Get count before processing
-    before_count = pd.read_sql_query(
-        "SELECT COUNT(*) as count FROM clean_game_logs", 
-        conn
-    ).iloc[0]['count']
+    try:
+        # Get count before processing
+        before_count = pd.read_sql_query(
+            "SELECT COUNT(*) as count FROM clean_game_logs", 
+            conn
+        ).iloc[0]['count']
+    except pd.io.sql.DatabaseError:
+        # If clean_game_logs doesn't exist yet, start count at 0
+        before_count = 0
     
     # First, clean all game logs (including new ones)
     clean_player_game_logs()

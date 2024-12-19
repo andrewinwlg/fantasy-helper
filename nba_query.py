@@ -94,5 +94,20 @@ home_away_splits = pd.read_sql_query(query6, conn)
 print("\nTop 10 Players' Home vs Away Scoring:")
 print(home_away_splits)
 
+#7. Get players with the most games played
+query7 = """
+SELECT 
+    ps.Player,
+    COUNT(*) as Games_Played 
+FROM player_game_logs pgl
+JOIN player_stats ps ON ps.player_url = pgl.player_url
+GROUP BY ps.Player, pgl.player_url 
+ORDER BY Games_Played DESC 
+LIMIT 10
+"""
+most_games_played = pd.read_sql_query(query7, conn)
+print("\nPlayers with the Most Games Played:")
+print(most_games_played)
+
 # Close the connection
 conn.close()

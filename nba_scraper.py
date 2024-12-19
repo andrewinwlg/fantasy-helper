@@ -13,13 +13,21 @@ def scrape_nba_stats():
         
         # Extract the data and links separately
         df = pd.DataFrame()
+        # Process each column in the dataframe that was scraped from basketball-reference.com
         for column in df_with_links.columns:
-            # If the column contains tuples (data, link), separate them
+            # Some columns contain tuples of (display_text, href_link) from the HTML table
+            # For example, Player column has ("LeBron James", "/players/j/jamesle01.html")
             if isinstance(df_with_links[column].iloc[0], tuple):
-                df[column] = df_with_links[column].apply(lambda x: x[0])  # Get the data
-                if column == 'Player':  # Only keep URLs for the Player column
-                    df['player_url'] = df_with_links[column].apply(lambda x: x[1])  # Get the link
+                # For all tuple columns, take just the display text [0] as the column value
+                df[column] = df_with_links[column].apply(lambda x: x[0])  
+                
+                # For the Player column specifically, also save the URL [1] to a new player_url column
+                # This URL will be used later to scrape individual player game logs
+                if column == 'Player':  
+                    df['player_url'] = df_with_links[column].apply(lambda x: x[1])
             else:
+                # For regular columns that don't have links (like points, rebounds etc)
+                # Just copy the values directly
                 df[column] = df_with_links[column]
         
         # Clean the data

@@ -9,18 +9,21 @@ conn = sqlite3.connect('nba_stats.db')
 # 1. Get top 10 scorers
 query1 = "SELECT Player, Team, PTS FROM player_stats ORDER BY PTS DESC LIMIT 10"
 top_scorers = pd.read_sql_query(query1, conn)
+top_scorers.index = top_scorers.reset_index(drop=True).index + 1
 print("\nTop 10 Scorers:")
 print(top_scorers)
 
 # 2. Get all stats for a specific player
 query2 = "SELECT * FROM player_stats WHERE Player = 'Luka Dončić'"
 player_stats = pd.read_sql_query(query2, conn)
+player_stats.index = player_stats.reset_index(drop=True).index + 1
 print("\nLuka Dončić's Stats:")
 print(player_stats)
 
 # 3. Get average points by team
 query3 = "SELECT Team, AVG(PTS) as Avg_Points FROM player_stats GROUP BY Team ORDER BY Avg_Points DESC"
 team_scoring = pd.read_sql_query(query3, conn)
+team_scoring.index = team_scoring.reset_index(drop=True).index + 1
 print("\nTeam Scoring Averages:")
 print(team_scoring)
 
@@ -42,6 +45,7 @@ ORDER BY CAST(pgl.PTS as INTEGER) DESC
 LIMIT 5
 """
 top_games = pd.read_sql_query(query4, conn)
+top_games.index = top_games.reset_index(drop=True).index + 1
 print("\nTop 5 Individual Scoring Performances:")
 print(top_games)
 
@@ -73,6 +77,7 @@ ORDER BY (avg_pts + avg_reb + avg_ast) DESC
 LIMIT 10
 """
 triple_double_players = pd.read_sql_query(query5, conn)
+triple_double_players.index = triple_double_players.reset_index(drop=True).index + 1
 print("\nPlayers with High Stats (Last 10 Games):")
 print(triple_double_players)
 
@@ -91,6 +96,7 @@ ORDER BY (Home_PPG + Away_PPG)/2 DESC
 LIMIT 10
 """
 home_away_splits = pd.read_sql_query(query6, conn)
+home_away_splits.index = home_away_splits.reset_index(drop=True).index + 1
 print("\nTop 10 Players' Home vs Away Scoring:")
 print(home_away_splits)
 
@@ -106,8 +112,28 @@ ORDER BY Games_Played DESC
 LIMIT 10
 """
 most_games_played = pd.read_sql_query(query7, conn)
+most_games_played.index = most_games_played.reset_index(drop=True).index + 1
 print("\nPlayers with the Most Games Played:")
 print(most_games_played)
+
+#8. Get players with highest scoring games this season
+query8 = """
+SELECT 
+    ps.Player as Player_Name,
+    pgl.Date,
+    pgl.Opp as Opponent,
+    pgl.PTS as Points,
+    pgl.TRB as Rebounds,
+    pgl.AST as Assists
+FROM player_game_logs pgl
+JOIN player_stats ps ON ps.player_url = pgl.player_url
+ORDER BY CAST(pgl.PTS as INTEGER) DESC
+LIMIT 10
+"""
+highest_scoring_games = pd.read_sql_query(query8, conn)
+highest_scoring_games.index = highest_scoring_games.reset_index(drop=True).index + 1
+print("\nHighest Individual Scoring Games This Season:")
+print(highest_scoring_games)
 
 # Close the connection
 conn.close()

@@ -1,0 +1,5 @@
+flask
+pandas
+pylint
+sqlite3
+lxml3 

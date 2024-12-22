@@ -1,0 +1,24 @@
+[MASTER]
+# Add the project directory to Python path
+init-hook='import sys; sys.path.append(".")'
+
+# Use multiple processes to speed up Pylint (use "0" for auto)
+jobs=0
+
+[MESSAGES CONTROL]
+# Disable specific warnings
+disable=C0111,  # missing-docstring
+        C0103,  # invalid-name
+        R0903,  # too-few-public-methods
+        W0511   # fixme
+
+[FORMAT]
+# Maximum number of characters on a single line
+max-line-length=120
+
+[REPORTS]
+# Set the output format
+output-format=text
+
+# Include a brief explanation of each error
+msg-template={path}:{line}: [{msg_id}({symbol}), {obj}] {msg}

@@ -1,0 +1,30 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+    -   id: check-yaml
+    -   id: check-ast
+    -   id: check-added-large-files
+
+-   repo: https://github.com/pycqa/pylint
+    rev: v2.17.0
+    hooks:
+    -   id: pylint
+        args: [
+            "--rcfile=pylintrc",
+            "--disable=C0326,C0330",
+            "--disable=C0301"
+        ]
+        additional_dependencies: [flask, pandas]
+
+-   repo: https://github.com/psf/black
+    rev: 23.3.0
+    hooks:
+    -   id: black
+        language_version: python3.8
+
+-   repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+    -   id: isort
+        args: ["--profile", "black"] 

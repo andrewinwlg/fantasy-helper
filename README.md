@@ -72,6 +72,7 @@ pre-commit run --all-files
 
 - [x] An incremental data fetcher that only gets new data since the last time it was run
 - [x] Fix error at the end: pandas.errors.DatabaseError: Execution failed on sql 'SELECT COUNT(*) as count FROM fantasy_points': no such table: fantasy_points
+- [X] Setup basic linting and gitgub status checks
 - [ ] Final fantasy points calculation took too long to run, so I need to speed it up -- says it was running for 12501 new games, but couldn't have been more than 300 or so
 - [ ] The incremental update seems to do too much clean up that's already been done in the nba_scraper.py
 - [ ] Present the data in a webpage

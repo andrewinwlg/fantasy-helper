@@ -56,11 +56,11 @@ this process could be sped up if the incremental_update checked 1) the date of t
 
 ### Status checks for builds and PRs
 
-1. **Code Linting (Flake8)**: Enforces PEP 8 standards and catches style or syntax issues.  
-2. **Unit Testing (Pytest)**: Runs automated tests to verify code functionality.  
-3. **Dependency Vulnerability Check (Safety)**: Detects known security issues in dependencies.  
-4. **Type Checking (MyPy)**: Validates type annotations for correctness and consistency.  
-5. **Code Formatting (Black)**: Ensures consistent code style through automatic formatting.  
+1. **Code Linting (Flake8)**: Enforces PEP 8 standards and catches style or syntax issues.
+2. **Unit Testing (Pytest)**: Runs automated tests to verify code functionality.
+3. **Dependency Vulnerability Check (Safety)**: Detects known security issues in dependencies.
+4. **Type Checking (MyPy)**: Validates type annotations for correctness and consistency.
+5. **Code Formatting (Black)**: Ensures consistent code style through automatic formatting.
 6. **Optional Enhancements**:
 
    - Code Coverage: Use pytest-cov to measure test coverage.

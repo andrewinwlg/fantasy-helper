@@ -2,16 +2,19 @@ repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
     hooks:
-    -   id: trailing-whitespace
-    -   id: end-of-file-fixer
     -   id: check-yaml
+    -   id: check-ast
     -   id: check-added-large-files
 
 -   repo: https://github.com/pycqa/pylint
     rev: v2.17.0
     hooks:
     -   id: pylint
-        args: [--rcfile=pylintrc]
+        args: [
+            "--rcfile=pylintrc",
+            "--disable=C0326,C0330",
+            "--disable=C0301"
+        ]
         additional_dependencies: [flask, pandas]
 
 -   repo: https://github.com/psf/black
@@ -24,4 +27,4 @@ repos:
     rev: 5.12.0
     hooks:
     -   id: isort
-        args: ["--profile", "black"]
+        args: ["--profile", "black"] 

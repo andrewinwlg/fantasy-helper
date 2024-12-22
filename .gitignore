@@ -8,3 +8,4 @@ __pycache__/
 
 # Ignore all files in the 'data' directory
 data/
+__pycache__/

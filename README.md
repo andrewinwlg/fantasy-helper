@@ -26,6 +26,48 @@ python incremental_update.py
 
 You can download any SQLite viewer like [DB Browser for SQLite](https://sqlitebrowser.org/dl/) and use that to view the data in a graphical layout, export to excel, etc.
 
+## Development Setup
+
+### 1. Install Dependencies
+```bash
+# Install all required packages including development dependencies
+pip install -r requirements.txt
+```
+
+### 2. Setup Pre-commit Hooks
+```bash
+# Install pre-commit
+pre-commit install
+```
+
+This will install hooks that run before each commit to check:
+- Valid YAML files
+- Valid Python syntax
+- No large files being committed
+- Basic pylint checks
+
+### 3. IDE Setup (VS Code)
+1. Install the Python extension in VS Code
+2. The repository includes settings in `.vscode/settings.json` that will:
+    - Enable pylint
+    - Use our custom pylint configuration
+    - Run linting on save
+
+### 4. Running Checks Manually
+```bash
+# Run pylint on all Python files
+pylint $(git ls-files '*.py')
+
+# Run pre-commit checks without committing
+pre-commit run --all-files
+```
+
+### 5. Understanding Checks
+- The project uses pylint with custom rules defined in `pylintrc`
+- GitHub Actions will run these checks on push/PR
+- Checks must pass (score > 7/10) for PR to be merged
+- Some style checks are disabled to maintain existing code style
+
 ## TODOs for this project
 
 - [x] An incremental data fetcher that only gets new data since the last time it was run

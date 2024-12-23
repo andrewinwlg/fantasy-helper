@@ -73,6 +73,8 @@ pre-commit run --all-files
 - [x] An incremental data fetcher that only gets new data since the last time it was run
 - [x] Fix error at the end: pandas.errors.DatabaseError: Execution failed on sql 'SELECT COUNT(*) as count FROM fantasy_points': no such table: fantasy_points
 - [X] Setup basic linting and gitgub status checks
+- [X] Scrape salary data
+- [ ] Check names match across 2 different scrapers
 - [ ] Final fantasy points calculation took too long to run, so I need to speed it up -- says it was running for 12501 new games, but couldn't have been more than 300 or so
 - [ ] The incremental update seems to do too much clean up that's already been done in the nba_scraper.py
 - [ ] Present the data in a webpage
@@ -109,3 +111,58 @@ this process could be sped up if the incremental_update checked 1) the date of t
    - Code Coverage: Use pytest-cov to measure test coverage.
    - Security Checks: Add tools like bandit for static security analysis.
    - Build Automation: Use tools like tox for testing across Python versions.
+
+## Setting up ChromeDriver on WSL
+
+1. Install Chrome:
+```bash
+# Add Chrome's repository key
+wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+
+# Add Chrome's repository
+echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+
+# Update and install Chrome
+sudo apt-get update
+sudo apt-get install -y google-chrome-stable
+```
+
+2. Install ChromeDriver matching your Chrome version:
+```bash
+# Get Chrome version
+CHROME_VERSION=$(google-chrome --version | cut -d " " -f3)
+echo "Chrome version: $CHROME_VERSION"
+
+# Create directory for ChromeDriver
+mkdir -p ~/webdrivers
+cd ~/webdrivers
+
+# Download matching ChromeDriver
+wget https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/$CHROME_VERSION/linux64/chromedriver-linux64.zip
+unzip chromedriver-linux64.zip
+sudo ln -s $HOME/webdrivers/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
+```
+
+3. Install required dependencies:
+```bash
+sudo apt-get install -y \
+    libxss1 \
+    libappindicator1 \
+    libindicator7 \
+    xvfb \
+    unzip \
+    libnss3 \
+    libgconf-2-4 \
+    libasound2
+```
+
+4. Verify installation:
+```bash
+# Check Chrome version
+google-chrome --version
+
+# Check ChromeDriver version
+chromedriver --version
+```
+
+The versions should match. If they don't, repeat step 2 with the correct version number.

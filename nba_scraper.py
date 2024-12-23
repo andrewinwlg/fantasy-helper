@@ -1,9 +1,12 @@
-import pandas as pd
 import sqlite3
-from datetime import datetime
 import time
+from datetime import datetime
 
-def scrape_nba_stats():
+import pandas as pd
+from unidecode import unidecode
+
+
+def scrape_nba_players():
     try:
         # URL of the NBA stats page
         url = "https://www.basketball-reference.com/leagues/NBA_2025_per_game.html"
@@ -19,7 +22,7 @@ def scrape_nba_stats():
             # For example, Player column has ("LeBron James", "/players/j/jamesle01.html")
             if isinstance(df_with_links[column].iloc[0], tuple):
                 # For all tuple columns, take just the display text [0] as the column value
-                df[column] = df_with_links[column].apply(lambda x: x[0])  
+                df[column] = df_with_links[column].apply(lambda x: unidecode(x[0]))  # Convert to ASCII
                 
                 # For the Player column specifically, also save the URL [1] to a new player_url column
                 # This URL will be used later to scrape individual player game logs
@@ -139,7 +142,7 @@ def process_game_logs(df):
 def main():
     # First get the main player stats
     print("Scraping NBA stats...")
-    df = scrape_nba_stats()
+    df = scrape_nba_players()
     
     if df is not None:
         print(f"Successfully scraped data for {len(df)} players")

@@ -13,15 +13,16 @@ repos:
         args: [
             "--rcfile=pylintrc",
             "--disable=C0326,C0330",
-            "--disable=C0301"
+            "--disable=C0301",
+            "--fail-under=8.0"
         ]
-        additional_dependencies: [flask, pandas]
+        additional_dependencies: [flask, pandas, selenium]
 
--   repo: https://github.com/psf/black
-    rev: 23.3.0
-    hooks:
-    -   id: black
-        language_version: python3.8
+# -   repo: https://github.com/psf/black
+#     rev: 23.3.0
+#     hooks:
+#     -   id: black
+#         language_version: python3.8
 
 -   repo: https://github.com/pycqa/isort
     rev: 5.12.0

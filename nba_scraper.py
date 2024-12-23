@@ -1,3 +1,4 @@
+import argparse
 import sqlite3
 import time
 from datetime import datetime
@@ -140,20 +141,36 @@ def process_game_logs(df):
             time.sleep(2)  # 2-second break between batches
 
 def main():
-    # First get the main player stats
-    print("Scraping NBA stats...")
-    df = scrape_nba_players()
+    parser = argparse.ArgumentParser(description='NBA Stats Scraper')
+    parser.add_argument('--players', action='store_true', help='Scrape only player stats')
+    parser.add_argument('--logs', action='store_true', help='Scrape only game logs')
+    parser.add_argument('--all', action='store_true', help='Scrape everything (default)')
     
-    if df is not None:
-        print(f"Successfully scraped data for {len(df)} players")
-        save_to_database(df, 'player_stats')
-        
+    args = parser.parse_args()
+    
+    # If no args specified, default to --all
+    if not (args.players or args.logs or args.all):
+        args.all = True
+    
+    print(f"\nStarting NBA scraper at {datetime.now()}")
+    
+    if args.all or args.players:
+        print("\nScraping player stats...")
+        scrape_nba_players()
+
+        if df is not None:
+            print(f"Successfully scraped data for {len(df)} players")
+            save_to_database(df, 'player_stats')
+        else:
+            print("Failed to scrape data")    
+    
+    if args.all or args.logs:
         # Now process game logs
         print("\nStarting to scrape individual player game logs...")
         process_game_logs(df)
         print("\nCompleted scraping all player game logs!")
-    else:
-        print("Failed to scrape data")
+    
+    print(f"\nFinished at {datetime.now()}")
 
 if __name__ == "__main__":
     main()

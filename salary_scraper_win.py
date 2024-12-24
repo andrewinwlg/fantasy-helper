@@ -398,25 +398,7 @@ def scrape_all_salaries():
         # Save to database
         final_df.to_sql('nba_salary_cap_players', conn, if_exists='replace', index=False)
         print(f"\nSaved salary data for {len(final_df)} players")
-        
-        # Create view
-        print("\nCreating database view...")
-        conn.execute("""
-        CREATE VIEW IF NOT EXISTS player_salary_stats AS
-        SELECT 
-            ps.Player,
-            nsc.salary as Current_Salary,
-            nsc.avgPoints as Avg_Fantasy_Points,
-            nsc.gamesPlayed as Games_Played,
-            ROUND(nsc.avgPoints * 1000.0 / NULLIF(nsc.salary, 0), 2) as Value_Average_Points,
-            ROUND(nsc.avgPoints * nsc.gamesPlayed * 1000.0 / NULLIF(nsc.salary, 0), 2) as Value_Total_Points
-        FROM player_stats ps
-        LEFT JOIN nba_salary_cap_players nsc ON ps.Player = nsc.name
-        WHERE nsc.avgPoints > 0
-        ORDER BY Value_Average_Points DESC
-        """)
-        print("View created successfully")
-        
+                
     except Exception as e:
         print(f"\nError: {str(e)}")
         print(f"Error type: {type(e).__name__}")

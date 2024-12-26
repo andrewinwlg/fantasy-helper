@@ -1,30 +1,75 @@
-# Fantasy Helper
+# NBA Fantasy Helper
 
-## To run from scratch
+Tools for scraping and analyzing NBA fantasy basketball data.
 
-First you will need to `pip install` `pandas`, `lxml3`, `sqlite`, and if you have an old version of `pandas`, then: `pip install --upgrade pandas`
+## Setup
 
+1. Install Python requirements:
+```bash
+pip install -r requirements.txt
+```
+
+2. Install Chrome and chromedriver:
+```bash
+# On Ubuntu/Debian:
+sudo apt install google-chrome-stable
+sudo apt install chromium-chromedriver
+
+# On Windows:
+# Download and install Chrome from https://www.google.com/chrome/
+# Download chromedriver from https://chromedriver.chromium.org/
+```
+
+## Usage
+
+1. Scrape current NBA player stats:
 ```bash
 python nba_scraper.py
 python post_scraper.py
 python calc_fpts.py
 ```
+Note: This may take up to an hour to run completely.
 
-Note that nba_scraper.py takes a long time to run, maybe up to an hour?
+2. Scrape NBA salary cap data:
+```bash
+# On Linux:
+python salary_scraper.py
 
-This will create the SQLite database with tables and views.
+# On Windows:
+python salary_scraper_win.py
+```
 
-## To update with new data
+3. Create database views:
+```bash
+python create_view.py
+```
 
-To fetch only new games since the last update:
+4. Run predictions for player performance:
+```bash
+python predict_performance.py
+```
 
+5. To update with new data only:
 ```bash
 python incremental_update.py
 ```
 
-## To view the data
+## Features
 
-You can download any SQLite viewer like [DB Browser for SQLite](https://sqlitebrowser.org/dl/) and use that to view the data in a graphical layout, export to excel, etc.
+- Scrapes player stats from basketball-reference.com
+- Scrapes salary data from NBA fantasy
+- Calculates fantasy points for different scoring systems
+- Predicts future player performance using machine learning
+- Creates useful database views for analysis
+
+## Data Sources
+
+- Player stats: basketball-reference.com
+- Salary data: nbafantasy.nba.com
+
+## Viewing the Data
+
+You can download any SQLite viewer like [DB Browser for SQLite](https://sqlitebrowser.org/dl/) to view the data in a graphical layout, export to excel, etc.
 
 ## Development Setup
 
@@ -74,10 +119,10 @@ pre-commit run --all-files
 - [x] Fix error at the end: pandas.errors.DatabaseError: Execution failed on sql 'SELECT COUNT(*) as count FROM fantasy_points': no such table: fantasy_points
 - [X] Setup basic linting and gitgub status checks
 - [X] Scrape salary data
-- [ ] Check names match across 2 different scrapers
+- [X] Check names match across 2 different scrapers
 - [ ] Final fantasy points calculation took too long to run, so I need to speed it up -- says it was running for 12501 new games, but couldn't have been more than 300 or so
 - [ ] The incremental update seems to do too much clean up that's already been done in the nba_scraper.py
-- [ ] Present the data in a webpage
+- [?] Present the data in a webpage
 - [ ] Do some basic data science to evaluate who are valuable players
 - [ ] Load your own fantasy team into the database for analysis
 - [ ] Load your whole fantasy league into the database for analysis
@@ -88,12 +133,29 @@ pre-commit run --all-files
 - [ ] Make the whole thing multi-tenant so different users can login and see only their own fantasy league/team
 - [ ] Package the whole thing up in deployable containers
 - [ ] Web interface for some simple use-cases
-- [ ] Speed up the incremental update:
-- [ ] Other efficiency improvements:
-  - [ ] Use a more efficient data structure for storing game numbers
-  - [ ] Use a more efficient data structure for storing player game logs
-  - [ ] Use a more efficient data structure for storing player stats
-  - [ ] Use a more efficient data structure for storing player game logs
+- [ ] Speed up the incremental update
+- [ ] Add more fantasy scoring systems
+- [ ] Add support for DraftKings scoring
+- [ ] Add support for FanDuel scoring
+- [ ] Add player injury status tracking
+- [ ] Add team schedule tracking
+- [ ] Add player news/updates tracking
+- [ ] Add player consistency metrics
+- [ ] Add player correlation analysis
+- [ ] Add player stacking recommendations
+- [ ] Add lineup optimization
+- [ ] Add player ownership projections
+- [ ] Add bankroll management recommendations
+- [ ] Add contest selection recommendations
+- [ ] Add player props predictions
+- [ ] Add player matchup analysis
+- [ ] Add team defense vs position stats
+- [ ] Add pace of play analysis
+- [ ] Add vegas odds integration
+- [ ] Add historical ownership data
+- [ ] Add ROI tracking and analysis
+
+## Implementation Notes
 
 ### Incremental update notes
 

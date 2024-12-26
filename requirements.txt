@@ -24,3 +24,12 @@ ipython>=8.0.0,<9.0.0  # for interactive development
 jupyter>=1.0.0,<2.0.0  # for data exploration
 matplotlib>=3.5.0,<4.0.0  # for visualizations
 seaborn>=0.11.0,<1.0.0  # for statistical visualizations
+
+pulp>=2.7.0,<3.0.0  # for optimization
+
+# Visualization
+matplotlib>=3.5.0,<4.0.0
+seaborn>=0.11.0,<1.0.0
+
+# Optimization
+pulp>=2.7.0,<3.0.0

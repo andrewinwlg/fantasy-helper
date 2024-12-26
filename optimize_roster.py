@@ -31,7 +31,7 @@ def get_player_data() -> pd.DataFrame:
         psr.Value_Per_Game_30D as value
     FROM player_stats ps
     JOIN nba_salary_cap_players nsc ON ps.Player = nsc.name
-    JOIN player_salary_recent_stats psr ON ps.Player = psr.Player
+    JOIN player_salary_stats psr ON ps.Player = psr.Player
     WHERE psr.Games_Last_30D >= 3  -- Minimum games played
     AND nsc.salary > 0
     """
@@ -91,7 +91,7 @@ def get_selected_players(df: pd.DataFrame, player_vars: Dict) -> pd.DataFrame:
 
 def visualize_roster(roster: pd.DataFrame) -> None:
     """Create visualizations for the optimal roster."""
-    plt.style.use('seaborn')
+    sns.set(style='whitegrid')
     
     # Create figure with subplots
     fig = plt.figure(figsize=(15, 10))
@@ -132,7 +132,7 @@ def main() -> None:
     optimal_roster = optimize_roster(df)
     
     print("\nOptimal Roster:")
-    print(optimal_roster.sort_values(['Position', 'Salary'], ascending=[True, False]))
+    print(optimal_roster.sort_values('Avg_Fantasy_Points', ascending=False))
     
     print(f"\nTotal Salary: {optimal_roster['Salary'].sum():.1f}")
     print(f"Projected Fantasy Points: {optimal_roster['Avg_Fantasy_Points'].sum():.1f}")

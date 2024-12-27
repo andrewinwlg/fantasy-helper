@@ -8,6 +8,7 @@ from typing import Dict
 
 import matplotlib.pyplot as plt
 import pandas as pd
+import pulp
 import seaborn as sns
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum
 
@@ -179,7 +180,8 @@ def optimize_team_changes(current_roster: pd.DataFrame, available_players: pd.Da
         current_team_players = current_roster[current_roster['Team'] == team].index
         prob += lpSum([drop_vars[i] for i in current_team_players]) <= 2  # Max 2 players from the same team to drop
 
-    # Solve the problem
+    # Suppress solver output
+    pulp.LpSolverDefault.msg = False  # Set to False to suppress output
     prob.solve()
     
     # Check if the problem is feasible

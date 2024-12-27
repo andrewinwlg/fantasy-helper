@@ -1,10 +1,13 @@
-import pandas as pd
 import sqlite3
-from datetime import datetime
 import time
-from nba_scraper import scrape_player_game_log, get_existing_player_urls
-from post_scraper import clean_player_game_logs
+from datetime import datetime
+
+import pandas as pd
+
 from calc_fpts import calculate_fantasy_points
+from nba_scraper import get_existing_player_urls, scrape_player_game_log
+from post_scraper import clean_player_game_logs
+
 
 def get_latest_games(conn, player_urls):
     """
@@ -112,7 +115,8 @@ def process_new_games(conn):
     return after_count - before_count
 
 def main():
-    print(f"Starting incremental update at {datetime.now()}")
+    start_time = datetime.now()
+    print(f"Starting incremental update at {start_time}")
     
     # Connect to database - change from fantasy.db to nba_stats.db
     conn = sqlite3.connect('nba_stats.db')
@@ -129,6 +133,8 @@ def main():
     print(f"Processed {processed_games} new games")
     
     conn.close()
+    elapsed_time = datetime.now() - start_time
+    print(f"Total elapsed time: {elapsed_time}")
     print(f"Completed incremental update at {datetime.now()}")
 
 if __name__ == "__main__":

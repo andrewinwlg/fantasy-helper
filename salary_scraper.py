@@ -66,9 +66,9 @@ def get_salary_cap_data(driver, page=1, max_retries=3):
                     player_data = {
                         'name': name,
                         'team': team,
-                        'avgPoints': float(cols[2].text),
+                        'salary': float(cols[2].text),
                         'ownership': float(cols[3].text.replace('%', '')),
-                        'gamesPlayed': float(cols[4].text),
+                        'avgPoints': float(cols[4].text),
                         'totalPoints': float(cols[5].text)
                     }
                     data.append(player_data)
@@ -227,9 +227,9 @@ def scrape_table_data(driver):
                 player_data = {
                     'name': name,
                     'team': team,
-                    'avgPoints': float(cols[2].text),
+                    'salary': float(cols[2].text),
                     'ownership': float(cols[3].text.replace('%', '')),
-                    'gamesPlayed': float(cols[4].text),
+                    'avgPoints': float(cols[4].text),
                     'totalPoints': float(cols[5].text)
                 }
                 data.append(player_data)

@@ -32,12 +32,12 @@ def create_player_stats_view(db_path='nba_stats.db'):
             ps.Team as Team,
             nsc.salary as Salary,
             nsc.avgPoints as Fantasy_Points_Per_Game,
-            rg.last_30d_fpts as Fantasy_Points_Per_Game_30D,
-            rg.games_last_30d as Games_Last_30D,
+            COALESCE(rg.last_30d_fpts, 0) as Fantasy_Points_Per_Game_30D,
+            COALESCE(rg.games_last_30d, 0) as Games_Last_30D,
             nsc.totalPoints as Total_Fantasy_Points,
             nsc.ownership as Ownership_Percentage,
             ROUND(nsc.avgPoints / NULLIF(nsc.salary, 0), 2) as Value_Per_Game,
-            ROUND(rg.last_30d_fpts / NULLIF(nsc.salary, 0), 2) as Value_Per_Game_30D,
+            ROUND(COALESCE(rg.last_30d_fpts, 0) / NULLIF(nsc.salary, 0), 2) as Value_Per_Game_30D,
             ROUND(nsc.totalPoints / NULLIF(nsc.salary, 0), 2) as Total_Value
         FROM player_stats ps
         LEFT JOIN nba_salary_cap_players nsc ON ps.Player = nsc.name

@@ -123,13 +123,13 @@ pre-commit run --all-files
 - [ ] Final fantasy points calculation took too long to run, so I need to speed it up -- says it was running for 12501 new games, but couldn't have been more than 300 or so
 - [ ] The incremental update seems to do too much clean up that's already been done in the nba_scraper.py
 - [?] Present the data in a webpage
-- [ ] Do some basic data science to evaluate who are valuable players
+- [X] Do some basic data science to evaluate who are valuable players
 - [ ] Load your own fantasy team into the database for analysis
 - [ ] Load your whole fantasy league into the database for analysis
 - [ ] Secure storage of fantasy league credentials
 - [ ] Build an AI agent that can translate English language requests into recommendations, e.g. "who should I consider trading with?" "what free agent shows the most promise?" etc
 - [ ] Setup pipeline for automatic builds
-- [ ] Setup status checks for merges
+- [X] Setup status checks for merges
 - [ ] Make the whole thing multi-tenant so different users can login and see only their own fantasy league/team
 - [ ] Package the whole thing up in deployable containers
 - [ ] Web interface for some simple use-cases
@@ -143,7 +143,7 @@ pre-commit run --all-files
 - [ ] Add player consistency metrics
 - [ ] Add player correlation analysis
 - [ ] Add player stacking recommendations
-- [ ] Add lineup optimization
+- [X] Add lineup optimization for NBA salary cap game
 - [ ] Add player ownership projections
 - [ ] Add bankroll management recommendations
 - [ ] Add contest selection recommendations

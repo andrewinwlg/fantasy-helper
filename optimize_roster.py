@@ -129,7 +129,7 @@ def visualize_roster(roster: pd.DataFrame) -> None:
     plt.tight_layout()
     plt.show()
 
-def optimize_team_changes(current_roster: pd.DataFrame, available_players: pd.DataFrame, salary_cap: float = 100.0, debug_flag: bool = False) -> None:
+def optimize_team_changes(current_roster: pd.DataFrame, available_players: pd.DataFrame, salary_cap: float = 100.0, transactions: int = 2, debug_flag: bool = False) -> None:
     """Optimize which players to drop and which to add."""
     
     # Create the model
@@ -146,8 +146,8 @@ def optimize_team_changes(current_roster: pd.DataFrame, available_players: pd.Da
             lpSum([current_roster.loc[i, 'avg_fpts'] * drop_vars[i] for i in current_roster.index])
     
     # Constraints
-    prob += lpSum([drop_vars[i] for i in current_roster.index]) == 2  # Drop exactly 2 players
-    prob += lpSum([add_vars[i] for i in available_players.index]) == 2  # Add exactly 2 players
+    prob += lpSum([drop_vars[i] for i in current_roster.index]) == transactions  # Drop exactly 'transactions' players
+    prob += lpSum([add_vars[i] for i in available_players.index]) == transactions  # Add exactly 'transactions' players
     
     # Salary cap constraint
     total_salary = (
@@ -279,10 +279,12 @@ def main() -> None:
     """Main function to run the optimization."""
     parser = argparse.ArgumentParser(description="NBA Fantasy Roster Optimization")
     parser.add_argument('--salary-cap', type=float, default=100.0, help='Set the salary cap for the roster (default: 100.0)')
+    parser.add_argument('--transactions', type=int, default=2, help='Number of players to add/drop (default: 2)')
     parser.add_argument('--debug', action='store_true', help='Enable debug output')
     
     args = parser.parse_args()
     salary_cap = args.salary_cap
+    transactions = args.transactions  # Store the transactions argument
     debug_flag = args.debug  # Store the debug flag
     
     current_team_file = 'current_team.txt'
@@ -317,7 +319,7 @@ def main() -> None:
         available_players.loc[:, 'is_back_court'] = available_players['Pos'].str.contains('G').astype(int)
         
         # Call the optimization function
-        optimize_team_changes(current_roster, available_players, salary_cap=salary_cap, debug_flag=debug_flag)
+        optimize_team_changes(current_roster, available_players, salary_cap=salary_cap, transactions=transactions, debug_flag=debug_flag)
     else:
         # If no file, run the full optimization
         df = get_player_data()

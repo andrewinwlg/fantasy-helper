@@ -50,7 +50,8 @@ def get_player_data() -> pd.DataFrame:
 
 def optimize_roster(
     df: pd.DataFrame, 
-    constraints: RosterConstraints = None
+    constraints: RosterConstraints = None,
+    debug_flag: bool = False
 ) -> pd.DataFrame:
     """Optimize roster using linear programming."""
     if constraints is None:
@@ -73,6 +74,7 @@ def optimize_roster(
         team_players = df[df['Team'] == team].index
         prob += lpSum([player_vars[i] for i in team_players]) <= constraints.max_per_team
 
+    pulp.LpSolverDefault.msg = debug_flag  # Set to True to show output, False to suppress
     prob.solve()
     return get_selected_players(df, player_vars)
 
@@ -180,8 +182,8 @@ def optimize_team_changes(current_roster: pd.DataFrame, available_players: pd.Da
         current_team_players = current_roster[current_roster['Team'] == team].index
         prob += lpSum([drop_vars[i] for i in current_team_players]) <= 2  # Max 2 players from the same team to drop
 
-    # Suppress solver output
-    pulp.LpSolverDefault.msg = False  # Set to False to suppress output
+    # Suppress solver output based on debug_flag
+    pulp.LpSolverDefault.msg = debug_flag  # Set to True to show output, False to suppress
     prob.solve()
     
     # Check if the problem is feasible
@@ -193,6 +195,7 @@ def optimize_team_changes(current_roster: pd.DataFrame, available_players: pd.Da
     players_to_drop = [
         {
             'Player': current_roster.loc[i, 'Player'],
+            'Position': 'FC' if current_roster.loc[i, 'is_front_court'] else 'BC',
             'Salary': current_roster.loc[i, 'salary'],
             'Avg_Fantasy_Points': current_roster.loc[i, 'avg_fpts'],
             'Value': current_roster.loc[i, 'value']
@@ -203,6 +206,7 @@ def optimize_team_changes(current_roster: pd.DataFrame, available_players: pd.Da
     players_to_add = [
         {
             'Player': available_players.loc[i, 'Player'],
+            'Position': 'FC' if available_players.loc[i, 'is_front_court'] else 'BC',
             'Salary': available_players.loc[i, 'salary'],
             'Avg_Fantasy_Points': available_players.loc[i, 'avg_fpts'],
             'Value': available_players.loc[i, 'value']
@@ -212,11 +216,11 @@ def optimize_team_changes(current_roster: pd.DataFrame, available_players: pd.Da
     
     print("Players to drop:")
     for player in players_to_drop:
-        print(f"{player['Player']} - Salary: {player['Salary']}, Avg Points: {player['Avg_Fantasy_Points']}, Value: {player['Value']}")
+        print(f"{player['Player']} ({player['Position']}) - Salary: {player['Salary']}, Avg Points: {player['Avg_Fantasy_Points']}, Value: {player['Value']}")
     
     print("Players to add:")
     for player in players_to_add:
-        print(f"{player['Player']} - Salary: {player['Salary']}, Avg Points: {player['Avg_Fantasy_Points']}, Value: {player['Value']}")
+        print(f"{player['Player']} ({player['Position']}) - Salary: {player['Salary']}, Avg Points: {player['Avg_Fantasy_Points']}, Value: {player['Value']}")
 
     # Calculate total salary and total average fantasy points before changes
     total_salary_before = current_roster['salary'].sum()
@@ -323,7 +327,7 @@ def main() -> None:
     else:
         # If no file, run the full optimization
         df = get_player_data()
-        optimal_roster = optimize_roster(df)
+        optimal_roster = optimize_roster(df, debug_flag=debug_flag)
         
         print("\nOptimal Roster:")
         print(optimal_roster.sort_values('Avg_Fantasy_Points', ascending=False))

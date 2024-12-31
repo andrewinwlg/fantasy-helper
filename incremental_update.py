@@ -123,14 +123,15 @@ def main():
     
     # Get player URLs
     player_urls = get_existing_player_urls()
-    
+    print(f"Got existing player URLs at {datetime.now()}")
+
     # Get and store new games
     new_games = get_latest_games(conn, player_urls)
-    print(f"Added {new_games} new games to the database")
-    
+    print(f"Added {new_games} new games to the database at {datetime.now()}")
+
     # Process new games
     processed_games = process_new_games(conn)
-    print(f"Processed {processed_games} new games")
+    print(f"Processed {processed_games} new games at {datetime.now()}")
     
     conn.close()
     elapsed_time = datetime.now() - start_time

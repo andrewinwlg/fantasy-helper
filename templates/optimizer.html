@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NBA Fantasy Roster Optimization</title>
+</head>
+
+<body>
+    <h1>NBA Fantasy Roster Optimization</h1>
+    <form method="POST">
+        <label for="salary_cap">Enter your salary cap:</label>
+        <input type="text" id="salary_cap" name="salary_cap" required>
+        <button type="submit">Optimize Roster</button>
+    </form>
+
+    {% if result %}
+    <h2>Results:</h2>
+    <pre>{{ result }}</pre>
+    {% endif %}
+</body>
+
+</html>

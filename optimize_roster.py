@@ -16,7 +16,7 @@ from pulp import LpMaximize, LpProblem, LpVariable, lpSum
 @dataclass
 class RosterConstraints:
     """Container for roster optimization constraints."""
-    salary_cap: int = 101.7
+    salary_cap: int = 100
     front_court_req: int = 5
     back_court_req: int = 5
     max_per_team: int = 2
@@ -50,7 +50,7 @@ def get_player_data() -> pd.DataFrame:
 
 def optimize_roster(
     df: pd.DataFrame, 
-    constraints: RosterConstraints = None,
+    salary_cap: float = 100.0,
     debug_flag: bool = False
 ) -> pd.DataFrame:
     """Optimize roster using linear programming."""
@@ -64,7 +64,7 @@ def optimize_roster(
     prob += lpSum([df.loc[i, 'avg_fpts'] * player_vars[i] for i in df.index])
     
     # Constraints
-    prob += lpSum([df.loc[i, 'salary'] * player_vars[i] for i in df.index]) <= constraints.salary_cap
+    prob += lpSum([df.loc[i, 'salary'] * player_vars[i] for i in df.index]) <= salary_cap
     prob += lpSum([player_vars[i] for i in df.index]) == 10
     prob += lpSum([player_vars[i] * df.loc[i, 'is_front_court'] for i in df.index]) == constraints.front_court_req
     prob += lpSum([player_vars[i] * df.loc[i, 'is_back_court'] for i in df.index]) == constraints.back_court_req
@@ -327,7 +327,7 @@ def main() -> None:
     else:
         # If no file, run the full optimization
         df = get_player_data()
-        optimal_roster = optimize_roster(df, debug_flag=debug_flag)
+        optimal_roster = optimize_roster(df, salary_cap=salary_cap, debug_flag=debug_flag)
         
         print("\nOptimal Roster:")
         print(optimal_roster.sort_values('Avg_Fantasy_Points', ascending=False))

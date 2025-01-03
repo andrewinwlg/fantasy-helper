@@ -288,6 +288,7 @@ def scrape_all_salaries():
     driver = None
     
     try:
+        start_time = datetime.now()  # Start time logging
         print("\nInitializing Chrome...")
         
         options = webdriver.ChromeOptions()
@@ -360,6 +361,10 @@ def scrape_all_salaries():
         # Save to database
         final_df.to_sql('nba_salary_cap_players', conn, if_exists='replace', index=False)
         print(f"\nSaved salary data for {len(final_df)} players")
+        
+        end_time = datetime.now()  # End time logging
+        elapsed_time = end_time - start_time
+        print(f"Total elapsed time: {elapsed_time}")
                 
     except Exception as e:
         print(f"\nError: {str(e)}")

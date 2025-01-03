@@ -51,12 +51,10 @@ def get_player_data() -> pd.DataFrame:
 def optimize_roster(
     df: pd.DataFrame, 
     salary_cap: float = 100.0,
+    constraints: RosterConstraints = RosterConstraints(),
     debug_flag: bool = False
 ) -> pd.DataFrame:
     """Optimize roster using linear programming."""
-    if constraints is None:
-        constraints = RosterConstraints()
-
     prob = LpProblem("NBA_Fantasy_Roster", LpMaximize)
     player_vars = LpVariable.dicts("players", ((i) for i in df.index), 0, 1, 'Binary')
     
@@ -147,9 +145,13 @@ def optimize_team_changes(current_roster: pd.DataFrame, available_players: pd.Da
     prob += lpSum([available_players.loc[i, 'avg_fpts'] * add_vars[i] for i in available_players.index]) - \
             lpSum([current_roster.loc[i, 'avg_fpts'] * drop_vars[i] for i in current_roster.index])
     
+    # Define players that cannot be dropped
+    protected_players = ['Nikola Jokic']  # Add the names of players you want to protect
+    
     # Constraints
-    prob += lpSum([drop_vars[i] for i in current_roster.index]) == transactions  # Drop exactly 'transactions' players
-    prob += lpSum([add_vars[i] for i in available_players.index]) == transactions  # Add exactly 'transactions' players
+    prob += lpSum([drop_vars[i] for i in current_roster.index]) <= transactions  # Drop at most  'transactions' players
+    prob += lpSum([add_vars[i] for i in available_players.index]) <= transactions  # Add at most 'transactions' players
+    prob += lpSum([drop_vars[i] for i in current_roster.index]) == lpSum([add_vars[i] for i in available_players.index]) <= transactions  # Add and drop the same amount
     
     # Salary cap constraint
     total_salary = (
@@ -159,6 +161,12 @@ def optimize_team_changes(current_roster: pd.DataFrame, available_players: pd.Da
     )
     prob += total_salary <= salary_cap  # Ensure the total salary does not exceed the cap
     
+    # Add constraints to prevent dropping protected players
+    for player in protected_players:
+        player_index = current_roster[current_roster['Player'] == player].index
+        if not player_index.empty:
+            prob += drop_vars[player_index[0]] == 0  # Set drop variable to 0 for protected players
+
     # Debugging: Print the constraints if debug_flag is set
     if debug_flag:
         print("Constraints:")

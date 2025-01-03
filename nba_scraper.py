@@ -118,7 +118,7 @@ def scrape_nba_players():
 def get_existing_player_urls():
     try:
         conn = sqlite3.connect('nba_stats.db')
-        query = "SELECT DISTINCT player_url FROM player_game_logs"
+        query = "SELECT DISTINCT player_url FROM player_game_logs" #TODO what about injured players first game of the season?
         df = pd.read_sql_query(query, conn)
         conn.close()
         return set(df['player_url'].tolist())

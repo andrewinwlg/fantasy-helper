@@ -9,7 +9,7 @@ from nba_scraper import get_existing_player_urls, scrape_player_game_log
 from post_scraper import clean_player_game_logs
 
 
-def get_latest_games(conn, player_urls):
+def get_latest_games(conn, player_urls, max_retries=3, timeout=10):
     """
     Fetches only new games for each player and adds them to the database.
     Returns the number of new games added.
@@ -45,45 +45,52 @@ def get_latest_games(conn, player_urls):
             params=[url]
         )
         
-        # Get current games from website
-        try:
-            current_games = scrape_player_game_log(url)
-            if current_games is None or current_games.empty:
-                continue
+        # Retry mechanism for scraping current games
+        for attempt in range(max_retries):
+            try:
+                current_games = scrape_player_game_log(url)
+                if current_games is None or current_games.empty:
+                    print(f"No current games found for {player_name}. Retrying...")
+                    time.sleep(timeout)  # Wait before retrying
+                    continue  # Retry the current player
+                
+                # Clean up the current games data
+                current_games = current_games[current_games['G'].notna()]   # Remove any rows without G
+                current_games = current_games[current_games['Rk'].notna()]  # Remove rows where player didn't play
+                current_games = current_games[current_games['Date'] != 'Date']  # Remove header rows
+                
+                # Convert both to integers for comparison
+                existing_game_numbers = set(pd.to_numeric(existing_games['G'], errors='coerce').dropna().astype(int))
+                current_game_numbers = pd.to_numeric(current_games['G'], errors='coerce')
+                
+                print(f"Existing games: {len(existing_game_numbers)}")
+                print(f"Current games: {len(current_games)}")
+                
+                # Find new games by comparing game numbers
+                new_games = current_games[~current_game_numbers.isin(existing_game_numbers)]
+                
+                if not new_games.empty:
+                    print(f"Found {len(new_games)} new games for {player_name}")
+                    print(f"New game numbers: {new_games['G'].tolist()}")
+                    new_games.to_sql('player_game_logs', conn, if_exists='append', index=False)
+                    new_games_count += len(new_games)
+                else:
+                    print(f"No new games found for {player_name}")
+                
+                print(f"Progress: {current_player}/{total_players} players checked")
+                
+                # Don't overwhelm the website
+                time.sleep(2)
+                break  # Exit the retry loop if successful
             
-            # Clean up the current games data
-            current_games = current_games[current_games['G'].notna()]   # Remove any rows without G
-            current_games = current_games[current_games['Rk'].notna()]  # Remove rows where player didn't play
-            current_games = current_games[current_games['Date'] != 'Date']  # Remove header rows
-            
-            # Convert both to integers for comparison
-            existing_game_numbers = set(pd.to_numeric(existing_games['G'], errors='coerce').dropna().astype(int))
-            current_game_numbers = pd.to_numeric(current_games['G'], errors='coerce')
-            
-            print(f"Existing games: {len(existing_game_numbers)}")
-            print(f"Current games: {len(current_games)}")
-            
-            # Find new games by comparing game numbers
-            new_games = current_games[~current_game_numbers.isin(existing_game_numbers)]
-            
-            if not new_games.empty:
-                print(f"Found {len(new_games)} new games for {player_name}")
-                print(f"New game numbers: {new_games['G'].tolist()}")
-                new_games.to_sql('player_game_logs', conn, if_exists='append', index=False)
-                new_games_count += len(new_games)
-            else:
-                print(f"No new games found for {player_name}")
-            
-            print(f"Progress: {current_player}/{total_players} players checked")
-            
-            # Don't overwhelm the website
-            time.sleep(2)
-            
-        except Exception as e:
-            print(f"Error processing {player_name}: {str(e)}")
-            continue
+            except Exception as e:
+                print(f"Error fetching games for {player_name} on attempt {attempt + 1}: {str(e)}")
+                if attempt < max_retries - 1:
+                    print("Retrying...")
+                    time.sleep(timeout)  # Wait before retrying
+                else:
+                    print(f"Failed to fetch games for {player_name} after {max_retries} attempts.")
     
-    print(f"\nCompleted checking all {total_players} players")
     return new_games_count
 
 def process_new_games(conn):

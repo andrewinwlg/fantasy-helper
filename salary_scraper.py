@@ -399,5 +399,5 @@ def go_to_page(driver, page_number):
 if __name__ == "__main__":
     print("Starting salary scraper...")
     scrape_all_salaries()
-    print("\nPress Enter to exit...")
-    input()
+    # print("\nPress Enter to exit...")
+    # input()

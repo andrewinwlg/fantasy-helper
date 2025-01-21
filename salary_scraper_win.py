@@ -415,5 +415,5 @@ def scrape_all_salaries():
 if __name__ == "__main__":
     print("Starting salary scraper...")
     scrape_all_salaries()
-    print("\nPress Enter to exit...")
-    input()
+    # print("\nPress Enter to exit...")
+    # input()

@@ -114,6 +114,12 @@ pre-commit run --all-files
 - Some style checks are disabled to maintain existing code style
 
 ## TODOs for this project
+- Use FC/BC from salary table?
+- move view creation from calc to create views
+- add 15 day and 7 day stats
+- check need for game logs and clean logs tables
+- automate daily runs
+- send email recommendation
 
 - [x] An incremental data fetcher that only gets new data since the last time it was run
 - [x] Fix error at the end: pandas.errors.DatabaseError: Execution failed on sql 'SELECT COUNT(*) as count FROM fantasy_points': no such table: fantasy_points

@@ -52,9 +52,15 @@ def optimize_roster(
     df: pd.DataFrame, 
     salary_cap: float = 100.0,
     constraints: RosterConstraints = RosterConstraints(),
+    excluded_players: list = None,
     debug_flag: bool = False
 ) -> pd.DataFrame:
     """Optimize roster using linear programming."""
+    
+    # Filter out excluded players if any are specified
+    if excluded_players:
+        df = df[~df['Player'].isin(excluded_players)].copy()
+    
     prob = LpProblem("NBA_Fantasy_Roster", LpMaximize)
     player_vars = LpVariable.dicts("players", ((i) for i in df.index), 0, 1, 'Binary')
     
@@ -293,11 +299,13 @@ def main() -> None:
     parser.add_argument('--salary-cap', type=float, default=100.0, help='Set the salary cap for the roster (default: 100.0)')
     parser.add_argument('--transactions', type=int, default=2, help='Number of players to add/drop (default: 2)')
     parser.add_argument('--debug', action='store_true', help='Enable debug output')
+    parser.add_argument('--exclude', nargs='+', help='List of players to exclude from optimization')
     
     args = parser.parse_args()
     salary_cap = args.salary_cap
-    transactions = args.transactions  # Store the transactions argument
-    debug_flag = args.debug  # Store the debug flag
+    transactions = args.transactions
+    debug_flag = args.debug
+    excluded_players = args.exclude if args.exclude else []
     
     current_team_file = 'current_team.txt'
     
@@ -335,7 +343,12 @@ def main() -> None:
     else:
         # If no file, run the full optimization
         df = get_player_data()
-        optimal_roster = optimize_roster(df, salary_cap=salary_cap, debug_flag=debug_flag)
+        optimal_roster = optimize_roster(
+            df, 
+            salary_cap=salary_cap, 
+            debug_flag=debug_flag,
+            excluded_players=excluded_players
+        )
         
         print("\nOptimal Roster:")
         print(optimal_roster.sort_values('Avg_Fantasy_Points', ascending=False))

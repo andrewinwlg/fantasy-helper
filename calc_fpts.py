@@ -1,5 +1,7 @@
 import sqlite3
+
 import pandas as pd
+
 
 def ensure_fantasy_columns_exist(conn):
     """
@@ -44,47 +46,70 @@ def calculate_fantasy_points():
     
     # Calculate ESPN fantasy points
     df['espn_fpts'] = (
-        df['3P'] * 1 +           # Three pointers made
-        df['FGA'] * -1 +         # Field goal attempts
-        df['FG'] * 2 +           # Field goals made
-        df['FTA'] * -1 +         # Free throw attempts
-        df['FT'] * 1 +           # Free throws made
-        df['TRB'] * 1 +          # Total rebounds
-        df['AST'] * 2 +          # Assists
-        df['STL'] * 4 +          # Steals
-        df['BLK'] * 4 +          # Blocks
-        df['TOV'] * -2           # Turnovers
+        df['3P'].astype(float) * 1 +           # Three pointers made
+        df['FGA'].astype(float) * -1 +         # Field goal attempts
+        df['FG'].astype(float) * 2 +           # Field goals made
+        df['FTA'].astype(float) * -1 +         # Free throw attempts
+        df['FT'].astype(float) * 1 +           # Free throws made
+        df['TRB'].astype(float) * 1 +          # Total rebounds
+        df['AST'].astype(float) * 2 +          # Assists
+        df['STL'].astype(float) * 4 +          # Steals
+        df['BLK'].astype(float) * 4 +          # Blocks
+        df['TOV'].astype(float) * -2           # Turnovers
     )
     
     # Calculate NBA Salary Cap fantasy points
     df['nba_salary_cap_fpts'] = (
-        df['PTS'] * 1 +          # Points
-        df['TRB'] * 1.2 +        # Rebounds
-        df['AST'] * 1.5 +        # Assists
-        df['BLK'] * 3 +          # Blocks
-        df['STL'] * 3 +          # Steals
-        df['TOV'] * -1           # Turnovers
+        df['PTS'].astype(float) * 1 +          # Points
+        df['TRB'].astype(float) * 1.2 +        # Rebounds
+        df['AST'].astype(float) * 1.5 +        # Assists
+        df['BLK'].astype(float) * 3 +          # Blocks
+        df['STL'].astype(float) * 3 +          # Steals
+        df['TOV'].astype(float) * -1           # Turnovers
     )
     
+    # Add some debug logging
+    print("\nSample calculations:")
+    sample_idx = df.index[0]
+    print(f"First row stats:")
+    print(f"Player: {df.loc[sample_idx, 'player_url']}")
+    print(f"Game: {df.loc[sample_idx, 'G']}")
+    print(f"ESPN Points: {df.loc[sample_idx, 'espn_fpts']:.2f}")
+    print(f"NBA Cap Points: {df.loc[sample_idx, 'nba_salary_cap_fpts']:.2f}")
+    
     # Update only the new rows in clean_game_logs
+    updated_count = 0
     for _, row in df.iterrows():
         update_query = """
         UPDATE clean_game_logs 
         SET espn_fpts = ?, nba_salary_cap_fpts = ?
         WHERE player_url = ? AND G = ?
         """
-        conn.execute(update_query, (
-            row['espn_fpts'], 
-            row['nba_salary_cap_fpts'],
+        cursor = conn.execute(update_query, (
+            float(row['espn_fpts']), 
+            float(row['nba_salary_cap_fpts']),
             row['player_url'],
             row['G']
         ))
+        updated_count += cursor.rowcount
     
     conn.commit()
     
-    print(f"Added fantasy points calculations for {len(df)} games")
+    # Verify the update
+    verify_query = """
+    SELECT COUNT(*) as count 
+    FROM clean_game_logs 
+    WHERE espn_fpts IS NOT NULL 
+    AND nba_salary_cap_fpts IS NOT NULL
+    """
+    cursor = conn.execute(verify_query)
+    verified_count = cursor.fetchone()[0]
+    
+    print(f"\nUpdated {updated_count} rows")
+    print(f"Total rows with fantasy points: {verified_count}")
     
     # Refresh the views
+    print("\nRefreshing views...")
     conn.execute("DROP VIEW IF EXISTS fantasy_averages")
     conn.execute("DROP VIEW IF EXISTS fantasy_home_away_splits")
     
@@ -127,6 +152,7 @@ def calculate_fantasy_points():
     print("- fantasy_home_away_splits: Home vs Away fantasy points splits")
     
     conn.close()
+    print("Done!")
 
 if __name__ == "__main__":
     calculate_fantasy_points() 

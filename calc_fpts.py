@@ -32,8 +32,9 @@ def calculate_fantasy_points():
     # Read only the clean game logs that don't have fantasy points calculated
     query = """
     SELECT * FROM clean_game_logs
-    WHERE espn_fpts IS NULL 
-    OR nba_salary_cap_fpts IS NULL
+    WHERE (espn_fpts IS NULL 
+    OR nba_salary_cap_fpts IS NULL)
+	AND MP not in ('Inactive','Did Not Play','Did Not Dress','Player Suspended','Not With Team')
     """
     df = pd.read_sql_query(query, conn)
     
@@ -97,10 +98,10 @@ def calculate_fantasy_points():
     
     # Verify the update
     verify_query = """
-    SELECT COUNT(*) as count 
-    FROM clean_game_logs 
-    WHERE espn_fpts IS NOT NULL 
-    AND nba_salary_cap_fpts IS NOT NULL
+    SELECT * FROM clean_game_logs
+    WHERE (espn_fpts IS NULL 
+    OR nba_salary_cap_fpts IS NULL)
+	AND MP not in ('Inactive','Did Not Play','Did Not Dress','Player Suspended','Not With Team')
     """
     cursor = conn.execute(verify_query)
     verified_count = cursor.fetchone()[0]

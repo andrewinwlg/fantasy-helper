@@ -80,7 +80,7 @@ def get_latest_games(conn, player_urls, max_retries=3, timeout=10):
                 print(f"Progress: {current_player}/{total_players} players checked")
                 
                 # Don't overwhelm the website
-                time.sleep(2)
+                time.sleep(1)
                 break  # Exit the retry loop if successful
             
             except Exception as e:

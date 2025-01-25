@@ -57,9 +57,31 @@ def optimize_roster(
 ) -> pd.DataFrame:
     """Optimize roster using linear programming."""
     
+    # Debug: Print initial dataframe info
+    print(f"\nInitial dataset size: {len(df)} players")
+    if debug_flag and excluded_players:
+        print(f"Players to exclude: {excluded_players}")
+    
     # Filter out excluded players if any are specified
     if excluded_players:
+        # Debug: Print players found/not found in dataset
+        found_players = set(df[df['Player'].isin(excluded_players)]['Player'])
+        not_found = set(excluded_players) - found_players
+        if not_found:
+            print(f"Warning: Some excluded players not found in dataset: {not_found}")
+        
+        # Filter and show how many were excluded
+        initial_count = len(df)
         df = df[~df['Player'].isin(excluded_players)].copy()
+        excluded_count = initial_count - len(df)
+        print(f"Excluded {excluded_count} players from optimization")
+        
+        if debug_flag:
+            print("Excluded players that were found in dataset:")
+            print(found_players)
+    
+    if len(df) < 10:
+        raise ValueError(f"Not enough players ({len(df)}) to create a valid roster after exclusions")
     
     prob = LpProblem("NBA_Fantasy_Roster", LpMaximize)
     player_vars = LpVariable.dicts("players", ((i) for i in df.index), 0, 1, 'Binary')
@@ -80,6 +102,11 @@ def optimize_roster(
 
     pulp.LpSolverDefault.msg = debug_flag  # Set to True to show output, False to suppress
     prob.solve()
+    
+    # Debug: Print optimization status
+    if debug_flag:
+        print(f"\nOptimization Status: {pulp.LpStatus[prob.status]}")
+    
     return get_selected_players(df, player_vars)
 
 def get_selected_players(df: pd.DataFrame, player_vars: Dict) -> pd.DataFrame:
@@ -135,8 +162,29 @@ def visualize_roster(roster: pd.DataFrame) -> None:
     plt.tight_layout()
     plt.show()
 
-def optimize_team_changes(current_roster: pd.DataFrame, available_players: pd.DataFrame, salary_cap: float = 100.0, transactions: int = 2, debug_flag: bool = False) -> None:
+def optimize_team_changes(
+    current_roster: pd.DataFrame, 
+    available_players: pd.DataFrame, 
+    salary_cap: float = 100.0, 
+    transactions: int = 2,
+    excluded_players: list = None,
+    debug_flag: bool = False
+) -> None:
     """Optimize which players to drop and which to add."""
+    
+    # Filter out excluded players if any are specified
+    if excluded_players:
+        # Debug: Print players found/not found in dataset
+        found_players = set(available_players[available_players['Player'].isin(excluded_players)]['Player'])
+        not_found = set(excluded_players) - found_players
+        if not_found:
+            print(f"Warning: Some excluded players not found in available players: {not_found}")
+        
+        # Filter and show how many were excluded
+        initial_count = len(available_players)
+        available_players = available_players[~available_players['Player'].isin(excluded_players)].copy()
+        excluded_count = initial_count - len(available_players)
+        print(f"Excluded {excluded_count} players from available players pool")
     
     # Create the model
     prob = LpProblem("NBA_Team_Changes", LpMaximize)
@@ -197,7 +245,7 @@ def optimize_team_changes(current_roster: pd.DataFrame, available_players: pd.Da
         prob += lpSum([drop_vars[i] for i in current_team_players]) <= 2  # Max 2 players from the same team to drop
 
     # Suppress solver output based on debug_flag
-    pulp.LpSolverDefault.msg = debug_flag  # Set to True to show output, False to suppress
+    pulp.LpSolverDefault.msg = debug_flag
     prob.solve()
     
     # Check if the problem is feasible
@@ -205,59 +253,8 @@ def optimize_team_changes(current_roster: pd.DataFrame, available_players: pd.Da
         print("The optimization problem is infeasible. Please check the constraints.")
         return
     
-    # Get results
-    players_to_drop = [
-        {
-            'Player': current_roster.loc[i, 'Player'],
-            'Position': 'FC' if current_roster.loc[i, 'is_front_court'] else 'BC',
-            'Salary': current_roster.loc[i, 'salary'],
-            'Avg_Fantasy_Points': current_roster.loc[i, 'avg_fpts'],
-            'Value': current_roster.loc[i, 'value']
-        }
-        for i in current_roster.index if drop_vars[i].value() == 1
-    ]
-    
-    players_to_add = [
-        {
-            'Player': available_players.loc[i, 'Player'],
-            'Position': 'FC' if available_players.loc[i, 'is_front_court'] else 'BC',
-            'Salary': available_players.loc[i, 'salary'],
-            'Avg_Fantasy_Points': available_players.loc[i, 'avg_fpts'],
-            'Value': available_players.loc[i, 'value']
-        }
-        for i in available_players.index if add_vars[i].value() == 1
-    ]
-    
-    print("Players to drop:")
-    for player in players_to_drop:
-        print(f"{player['Player']} ({player['Position']}) - Salary: {player['Salary']}, Avg Points: {player['Avg_Fantasy_Points']}, Value: {player['Value']}")
-    
-    print("Players to add:")
-    for player in players_to_add:
-        print(f"{player['Player']} ({player['Position']}) - Salary: {player['Salary']}, Avg Points: {player['Avg_Fantasy_Points']}, Value: {player['Value']}")
-
-    # Calculate total salary and total average fantasy points before changes
-    total_salary_before = current_roster['salary'].sum()
-    total_avg_fantasy_points_before = current_roster['avg_fpts'].sum()
-    
-    print(f"Total Salary before changes: {total_salary_before:.2f}")
-    print(f"Total Average Fantasy Points before changes: {total_avg_fantasy_points_before:.2f}")
-
-    # Calculate total salary and total average fantasy points after changes
-    total_salary_after = (
-        total_salary_before - 
-        sum(current_roster.loc[i, 'salary'] for i in current_roster.index if drop_vars[i].value() == 1) + 
-        sum(available_players.loc[i, 'salary'] for i in available_players.index if add_vars[i].value() == 1)
-    )
-    
-    total_avg_fantasy_points_after = (
-        total_avg_fantasy_points_before - 
-        sum(current_roster.loc[i, 'avg_fpts'] for i in current_roster.index if drop_vars[i].value() == 1) + 
-        sum(available_players.loc[i, 'avg_fpts'] for i in available_players.index if add_vars[i].value() == 1)
-    )
-    
-    print(f"Total Salary after changes: {total_salary_after:.2f}")
-    print(f"Total Average Fantasy Points after changes: {total_avg_fantasy_points_after:.2f}")
+    # Get results and print them
+    print_optimization_results(current_roster, available_players, drop_vars, add_vars)
 
 def load_current_team(file_path: str) -> pd.DataFrame:
     """Load current team players from a text file."""
@@ -293,6 +290,63 @@ def load_current_team(file_path: str) -> pd.DataFrame:
     
     return current_roster
 
+def print_optimization_results(current_roster: pd.DataFrame, available_players: pd.DataFrame, drop_vars: Dict, add_vars: Dict) -> None:
+    """Print the results of the optimization."""
+    # Get players to drop
+    players_to_drop = [
+        {
+            'Player': current_roster.loc[i, 'Player'],
+            'Position': current_roster.loc[i, 'Pos'],
+            'Salary': current_roster.loc[i, 'salary'],
+            'Avg_Fantasy_Points': current_roster.loc[i, 'avg_fpts'],
+            'Value': current_roster.loc[i, 'value']
+        }
+        for i in current_roster.index if drop_vars[i].value() == 1
+    ]
+    
+    # Get players to add
+    players_to_add = [
+        {
+            'Player': available_players.loc[i, 'Player'],
+            'Position': available_players.loc[i, 'Pos'],
+            'Salary': available_players.loc[i, 'salary'],
+            'Avg_Fantasy_Points': available_players.loc[i, 'avg_fpts'],
+            'Value': available_players.loc[i, 'value']
+        }
+        for i in available_players.index if add_vars[i].value() == 1
+    ]
+    
+    print("\nPlayers to drop:")
+    for player in players_to_drop:
+        print(f"{player['Player']} ({player['Position']}) - Salary: {player['Salary']}, Avg Points: {player['Avg_Fantasy_Points']:.1f}, Value: {player['Value']:.2f}")
+    
+    print("\nPlayers to add:")
+    for player in players_to_add:
+        print(f"{player['Player']} ({player['Position']}) - Salary: {player['Salary']}, Avg Points: {player['Avg_Fantasy_Points']:.1f}, Value: {player['Value']:.2f}")
+
+    # Calculate total salary and total average fantasy points before changes
+    total_salary_before = current_roster['salary'].sum()
+    total_avg_fantasy_points_before = current_roster['avg_fpts'].sum()
+    
+    print(f"\nTotal Salary before changes: {total_salary_before:.2f}")
+    print(f"Total Average Fantasy Points before changes: {total_avg_fantasy_points_before:.2f}")
+
+    # Calculate total salary and total average fantasy points after changes
+    total_salary_after = (
+        total_salary_before - 
+        sum(current_roster.loc[i, 'salary'] for i in current_roster.index if drop_vars[i].value() == 1) + 
+        sum(available_players.loc[i, 'salary'] for i in available_players.index if add_vars[i].value() == 1)
+    )
+    
+    total_avg_fantasy_points_after = (
+        total_avg_fantasy_points_before - 
+        sum(current_roster.loc[i, 'avg_fpts'] for i in current_roster.index if drop_vars[i].value() == 1) + 
+        sum(available_players.loc[i, 'avg_fpts'] for i in available_players.index if add_vars[i].value() == 1)
+    )
+    
+    print(f"Total Salary after changes: {total_salary_after:.2f}")
+    print(f"Total Average Fantasy Points after changes: {total_avg_fantasy_points_after:.2f}")
+
 def main() -> None:
     """Main function to run the optimization."""
     parser = argparse.ArgumentParser(description="NBA Fantasy Roster Optimization")
@@ -306,6 +360,9 @@ def main() -> None:
     transactions = args.transactions
     debug_flag = args.debug
     excluded_players = args.exclude if args.exclude else []
+    
+    if excluded_players:
+        print(f"\nExcluding the following players from optimization: {excluded_players}")
     
     current_team_file = 'current_team.txt'
     
@@ -339,7 +396,14 @@ def main() -> None:
         available_players.loc[:, 'is_back_court'] = available_players['Pos'].str.contains('G').astype(int)
         
         # Call the optimization function
-        optimize_team_changes(current_roster, available_players, salary_cap=salary_cap, transactions=transactions, debug_flag=debug_flag)
+        optimize_team_changes(
+            current_roster, 
+            available_players, 
+            salary_cap=salary_cap, 
+            transactions=transactions,
+            excluded_players=excluded_players,
+            debug_flag=debug_flag
+        )
     else:
         # If no file, run the full optimization
         df = get_player_data()

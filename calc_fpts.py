@@ -98,16 +98,17 @@ def calculate_fantasy_points():
     
     # Verify the update
     verify_query = """
-    SELECT * FROM clean_game_logs
+    SELECT COUNT(*) FROM clean_game_logs
     WHERE (espn_fpts IS NULL 
     OR nba_salary_cap_fpts IS NULL)
-	AND MP not in ('Inactive','Did Not Play','Did Not Dress','Player Suspended','Not With Team')
+    AND MP not in ('Inactive','Did Not Play','Did Not Dress','Player Suspended','Not With Team')
     """
     cursor = conn.execute(verify_query)
-    verified_count = cursor.fetchone()[0]
+    result = cursor.fetchone()
+    verified_count = result[0] if result is not None else 0  # Handle None case
     
     print(f"\nUpdated {updated_count} rows")
-    print(f"Total rows with fantasy points: {verified_count}")
+    print(f"Total rows with no fantasy points: {verified_count}")
     
     # Refresh the views
     print("\nRefreshing views...")

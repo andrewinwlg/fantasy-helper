@@ -22,27 +22,13 @@ def setup_chrome_driver():
     return webdriver.Chrome(options=chrome_options)
 
 
-def ensure_table_exists(conn):
-    """Create the nba_salary_team table if it doesn't exist."""
-    cursor = conn.cursor()
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS nba_salary_team (
-        login_id TEXT,
-        player_name TEXT,
-        scrape_date TIMESTAMP,
-        PRIMARY KEY (login_id, player_name)
-    )
-    """)
-    conn.commit()
-
-
 def init_database():
     """Initialize the database and create tables if they don't exist."""
     conn = sqlite3.connect('nba_fantasy.db')
     try:
         cursor = conn.cursor()
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS players (
+            CREATE TABLE IF NOT EXISTS nba_team_players (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 login_id TEXT NOT NULL,
                 player_name TEXT NOT NULL,
@@ -59,7 +45,6 @@ def scrape_team_roster(login_id: str, password: str) -> list:
     Scrape the current team roster from NBA Fantasy website.
     Returns list of player names.
     """
-    # Initialize database first
     init_database()
     
     driver = setup_chrome_driver()
@@ -193,21 +178,18 @@ def scrape_team_roster(login_id: str, password: str) -> list:
         
         if players:
             try:
-                # Connect to database with timeout
                 conn = sqlite3.connect('nba_fantasy.db', timeout=20)
                 cursor = conn.cursor()
                 
                 # Delete existing players for this login
-                cursor.execute('DELETE FROM players WHERE login_id = ?', (login_id,))
+                cursor.execute('DELETE FROM nba_team_players WHERE login_id = ?', (login_id,))
                 
-                # Insert new players
                 for player in players:
                     cursor.execute(
-                        'INSERT INTO players (login_id, player_name) VALUES (?, ?)',
+                        'INSERT INTO nba_team_players (login_id, player_name) VALUES (?, ?)',
                         (login_id, player)
                     )
                 
-                # Commit changes
                 conn.commit()
                 print(f"Successfully updated {len(players)} players in database")
                 
@@ -223,7 +205,6 @@ def scrape_team_roster(login_id: str, password: str) -> list:
         
     except Exception as e:
         print(f"Error scraping team roster: {str(e)}")
-        # Take screenshot of error state
         try:
             driver.save_screenshot('debug_error.png')
             print("Saved error screenshot to debug_error.png")
@@ -231,43 +212,14 @@ def scrape_team_roster(login_id: str, password: str) -> list:
             pass
     finally:
         driver.quit()
-        # Extra safety - ensure DB connection is closed
         if conn:
             conn.close()
     
     return players
 
 
-def update_database(players: list, login_id: str):
-    """Update the database with current roster."""
-    conn = sqlite3.connect('nba_stats.db')
-    ensure_table_exists(conn)
-    
-    try:
-        # Remove old entries for this login
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM nba_salary_team WHERE login_id = ?", (login_id,))
-        
-        # Insert new roster
-        current_time = datetime.now()
-        for player in players:
-            cursor.execute("""
-            INSERT INTO nba_salary_team (login_id, player_name, scrape_date)
-            VALUES (?, ?, ?)
-            """, (login_id, player, current_time))
-        
-        conn.commit()
-        print(f"Updated database with {len(players)} players for {login_id}")
-        
-    except sqlite3.Error as e:
-        print(f"Database error: {str(e)}")
-    finally:
-        conn.close()
-
-
 def main():
     """Main function to run the scraper."""
-    # Get credentials from environment variables
     login_id = os.getenv('NBA_LOGIN')
     password = os.getenv('NBA_PWD')
     
@@ -278,10 +230,7 @@ def main():
     print(f"Starting team scraper for {login_id}")
     players = scrape_team_roster(login_id, password)
     
-    if players:
-        update_database(players, login_id)
-        print("Team roster update complete")
-    else:
+    if not players:
         print("No players found - check login credentials or website structure")
 
 

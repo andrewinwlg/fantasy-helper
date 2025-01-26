@@ -61,6 +61,10 @@ def print_ordered_roster(players: List[str]) -> None:
     )
     print(table)
     
+    # Print total of all 30D averages
+    total_avg_fpts_30d = df['avg_fpts_30d'].sum()
+    print(f"\nTotal of all 30D averages: {total_avg_fpts_30d:.1f}")
+    
     # Return DataFrame without the display column
     df = df.drop('Player_Display', axis=1)
     return df

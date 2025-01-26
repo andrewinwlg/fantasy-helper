@@ -33,3 +33,6 @@ seaborn>=0.11.0,<1.0.0
 
 # Optimization
 pulp>=2.7.0,<3.0.0
+
+# Formatting
+tabulate>=0.9.0,<1.0.0  # for table formatting

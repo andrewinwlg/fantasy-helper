@@ -44,9 +44,9 @@ python salary_scraper_win.py
 python create_view.py
 ```
 
-4. Run predictions for player performance:
+4. Run optimization for NBA salary game:
 ```bash
-python predict_performance.py
+python optimize_roster.py --salary-cap 100.0 --transactions 2 --exclude "Keaton Wallace"
 ```
 
 5. To update with new data only:
@@ -54,7 +54,38 @@ python predict_performance.py
 python incremental_update.py
 ```
 
+6. Run the nightly scraper:
+```bash
+./nightly_scraper.sh
+```
+
+7. 
 ## Features
+
+8. 
+## Setting Up a Cron Job for Nightly Scraper
+
+To automate the nightly scraping process, you can set up a cron job. Follow these steps:
+
+# Start of Selection
+1. Open your terminal.
+2. Type `sudo service cron status` to check if the cron service is running. If it is not running, start it with `sudo service cron start`.
+3. Type `crontab -e` to edit your cron jobs.
+4. Add the following line to schedule the scraper to run every night at 2 AM:
+   ```bash
+   0 2 * * * /path/to/your/script/nightly_scraper.sh
+   ```
+   Make sure to replace `/path/to/your/script/` with the actual path to your `nightly_scraper.sh` file.
+5. Save and exit the editor.
+6. If you want cron to run whenever WSL starts, add the following to `/etc/wsl.conf`:
+   ```ini
+   [boot]
+   command="service cron start"
+   ```
+7. If you want WSL to run at windows startup, see: [How to make WSL run services at startup - Super User](https://superuser.com/questions/1343558/how-to-make-wsl-run-services-at-startup)
+# End of Selection
+
+You can check if your cron job is set up correctly by typing `crontab -l` to list all scheduled jobs.
 
 - Scrapes player stats from basketball-reference.com
 - Scrapes salary data from NBA fantasy
@@ -114,7 +145,7 @@ pre-commit run --all-files
 - Some style checks are disabled to maintain existing code style
 
 ## TODOs for this project
-- Use FC/BC from salary table?
+- Scrape FC/BC from nba.com -- or just manually update positions as needed
 - move view creation from calc to create views
 - add 15 day and 7 day stats
 - check need for game logs and clean logs tables

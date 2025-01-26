@@ -12,6 +12,8 @@ import pulp
 import seaborn as sns
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum
 
+from utils import reorder_current_team
+
 
 @dataclass
 class RosterConstraints:
@@ -168,7 +170,8 @@ def optimize_team_changes(
     salary_cap: float = 100.0, 
     transactions: int = 2,
     excluded_players: list = None,
-    debug_flag: bool = False
+    debug_flag: bool = False,
+    replace: bool = False
 ) -> None:
     """Optimize which players to drop and which to add."""
     
@@ -254,7 +257,37 @@ def optimize_team_changes(
         return
     
     # Get results and print them
-    print_optimization_results(current_roster, available_players, drop_vars, add_vars)
+    players_to_drop, players_to_add = print_optimization_results(current_roster, available_players, drop_vars, add_vars)
+    
+    if replace:
+        while True:
+            response = input("\nDo you want to apply these changes to current_team.txt? (yes/no): ").lower()
+            if response in ['yes', 'y', 'no', 'n']:
+                break
+            print("Please answer 'yes' or 'no'")
+        
+        if response in ['yes', 'y']:
+            # Read current team
+            with open('current_team.txt', 'r') as f:
+                current_players = [line.strip() for line in f.readlines()]
+            
+            # Remove dropped players and add new players
+            for player in players_to_drop:
+                current_players.remove(player['Player'])
+            for player in players_to_add:
+                current_players.append(player['Player'])
+            
+            # Write updated team back to file
+            with open('current_team.txt', 'w') as f:
+                for player in current_players:
+                    f.write(f"{player}\n")
+            
+            print("\nUpdated current_team.txt with the new roster")
+            
+            # Reorder the team by 30-day average
+            reorder_current_team()
+        else:
+            print("\nNo changes made to current_team.txt")
 
 def load_current_team(file_path: str) -> pd.DataFrame:
     """Load current team players from a text file."""
@@ -290,8 +323,8 @@ def load_current_team(file_path: str) -> pd.DataFrame:
     
     return current_roster
 
-def print_optimization_results(current_roster: pd.DataFrame, available_players: pd.DataFrame, drop_vars: Dict, add_vars: Dict) -> None:
-    """Print the results of the optimization."""
+def print_optimization_results(current_roster: pd.DataFrame, available_players: pd.DataFrame, drop_vars: Dict, add_vars: Dict) -> tuple:
+    """Print the results of the optimization and return the changes."""
     # Get players to drop
     players_to_drop = [
         {
@@ -347,6 +380,8 @@ def print_optimization_results(current_roster: pd.DataFrame, available_players: 
     print(f"Total Salary after changes: {total_salary_after:.2f}")
     print(f"Total Average Fantasy Points after changes: {total_avg_fantasy_points_after:.2f}")
 
+    return players_to_drop, players_to_add
+
 def main() -> None:
     """Main function to run the optimization."""
     parser = argparse.ArgumentParser(description="NBA Fantasy Roster Optimization")
@@ -354,12 +389,14 @@ def main() -> None:
     parser.add_argument('--transactions', type=int, default=2, help='Number of players to add/drop (default: 2)')
     parser.add_argument('--debug', action='store_true', help='Enable debug output')
     parser.add_argument('--exclude', nargs='+', help='List of players to exclude from optimization')
+    parser.add_argument('--replace', action='store_true', help='Update current_team.txt with recommended changes after confirmation')
     
     args = parser.parse_args()
     salary_cap = args.salary_cap
     transactions = args.transactions
     debug_flag = args.debug
     excluded_players = args.exclude if args.exclude else []
+    replace = args.replace
     
     if excluded_players:
         print(f"\nExcluding the following players from optimization: {excluded_players}")
@@ -402,7 +439,8 @@ def main() -> None:
             salary_cap=salary_cap, 
             transactions=transactions,
             excluded_players=excluded_players,
-            debug_flag=debug_flag
+            debug_flag=debug_flag,
+            replace=replace
         )
     else:
         # If no file, run the full optimization

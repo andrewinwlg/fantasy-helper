@@ -15,5 +15,6 @@ cd /mnt/c/BUILD/git_build/fantasy-helper
 python3 incremental_update.py
 python3 salary_scraper.py
 python3 optimize_roster.py --salary-cap 101.3 --transactions 2 --exclude "Keaton Wallace"
+python3 utils.py --print-team
 
 echo "NBA scraper script finished at $(date)"

@@ -108,7 +108,7 @@ def process_new_games(conn):
         before_count = 0
     
     # First, clean all game logs (including new ones)
-    clean_player_game_logs()
+    clean_player_game_logs(incremental=True)
     
     # Then calculate fantasy points for all games
     calculate_fantasy_points()

@@ -14,8 +14,8 @@ def clean_player_game_logs(incremental: bool = False) -> None:
     conn = sqlite3.connect('nba_stats.db')
     
     try:
-        # Load raw game logs
-        df = pd.read_sql('SELECT * FROM game_logs', conn)
+        # Load raw game logs - use player_game_logs directly
+        df = pd.read_sql('SELECT * FROM player_game_logs', conn)
         
         # Clean the data
         df = clean_game_logs(df)

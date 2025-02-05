@@ -22,18 +22,21 @@ def print_ordered_roster(players: List[str]) -> None:
     SELECT 
         ps.Player,
         psr.Fantasy_Points_Per_Game_30D as avg_fpts_30d,
+        psr.Value_Per_Game_30D,
         psr.Games_Last_30D,
+        psr.Fantasy_Points_Per_Game_15D as avg_fpts_15d,
+        psr.Fantasy_Points_Per_Game_7D as avg_fpts_7d,
         ps.Pos,
         ps.Team
     FROM player_stats ps
     JOIN player_salary_stats psr ON ps.Player = psr.Player
     WHERE ps.Player IN ({})
     ORDER BY psr.Fantasy_Points_Per_Game_30D DESC
-    """.format(','.join([f"'{player}'" for player in players]))
+    """.format(','.join('?' * len(players)))
 
     try:
         with sqlite3.connect('nba_stats.db') as conn:
-            df = pd.read_sql_query(query, conn)
+            df = pd.read_sql_query(query, conn, params=players)
     except sqlite3.Error as e:
         print(f"Database error: {e}")
         return
@@ -53,8 +56,26 @@ def print_ordered_roster(players: List[str]) -> None:
     print("\nRoster ordered by 30-day average:")
     print("(* indicates change in order from current_team.txt)")
     table = tabulate(
-        df[['Player_Display', 'avg_fpts_30d', 'Games_Last_30D', 'Pos', 'Team']], 
-        headers=['Player', 'FP/G (30d)', 'Games (30d)', 'Pos', 'Team'],
+        df[[
+            'Player_Display', 
+            'avg_fpts_30d',
+            'Value_Per_Game_30D',
+            'avg_fpts_15d', 
+            'avg_fpts_7d',
+            'Games_Last_30D',
+            'Pos',
+            'Team'
+        ]], 
+        headers=[
+            'Player',
+            'FP/G (30d)',
+            'Value (30d)',
+            'FP/G (15d)',
+            'FP/G (7d)',
+            'Games (30d)',
+            'Pos',
+            'Team'
+        ],
         floatfmt=".1f",
         tablefmt="pipe",
         showindex=False
@@ -98,16 +119,64 @@ def reorder_current_team() -> None:
         print(f"Error writing to file: {e}")
 
 
+def update_team(login_id: str) -> None:
+    """
+    Update current_team.txt with the latest team roster from the database.
+    
+    Args:
+        login_id: The login ID to fetch the team roster for
+    """
+    try:
+        # Connect to database
+        with sqlite3.connect('nba_fantasy.db') as conn:
+            # Get latest team roster for this login_id
+            query = """
+            SELECT player_name 
+            FROM nba_team_players 
+            WHERE login_id = ?
+            ORDER BY id ASC
+            """
+            df = pd.read_sql_query(query, conn, params=[login_id])
+            
+            if df.empty:
+                print(f"No players found for login_id: {login_id}")
+                return
+            
+            if len(df) != 10:
+                print(f"Error: Expected 10 players, but found {len(df)} for login_id: {login_id}")
+                return
+                
+            # Write to current_team.txt
+            with open('current_team.txt', 'w') as f:
+                for player in df['player_name']:
+                    f.write(f"{player}\n")
+            
+            print(f"Updated current_team.txt with {len(df)} players")
+            
+            # Print the updated roster
+            print(f"\nCurrent roster for {login_id}:")
+            for player in df['player_name']:
+                print(f"  - {player}")
+                
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+    except IOError as e:
+        print(f"Error writing to file: {e}")
+
+
 def main() -> None:
     """Parse command line arguments and run requested function."""
     parser = argparse.ArgumentParser(description="NBA Fantasy roster utilities")
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--print-team', action='store_true', help='Print current team ordered by 30-day average')
     group.add_argument('--reorder', action='store_true', help='Reorder current_team.txt by 30-day average')
+    group.add_argument('--update', help='Update current_team.txt from database for given login_id')
     
     args = parser.parse_args()
     
-    if args.print_team or args.reorder:
+    if args.update:
+        update_team(args.update)
+    elif args.print_team or args.reorder:
         try:
             with open('current_team.txt', 'r') as f:
                 players = [line.strip() for line in f.readlines()]

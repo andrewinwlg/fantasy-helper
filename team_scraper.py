@@ -143,30 +143,46 @@ def scrape_team_roster(login_id: str, password: str) -> list:
         for selector in selectors:
             print(f"Trying selector: {selector}")
             try:
-                player_elements = wait.until(
-                    EC.presence_of_all_elements_located((By.CSS_SELECTOR, selector))
-                )
-                if player_elements:
-                    print(f"Found {len(player_elements)} elements with selector {selector}")
-                    # Get last names
-                    last_names = [el.text.strip() for el in player_elements]
-                    
-                    # Find corresponding first names
-                    first_name_elements = driver.find_elements(By.CSS_SELECTOR, 
-                        '.ElementInTable__Name-sc-1grpbqk-1 .Utils__Ellipsis-sc-1eav01y-0')
-                    first_names = [el.text.strip() for el in first_name_elements]
-                    
-                    # Combine first and last names
+                # Get all player rows
+                player_rows = driver.find_elements(By.CSS_SELECTOR, '.ElementTable__ElementRow-sc-8zrnbf-3')
+                
+                if player_rows:
+                    print(f"Found {len(player_rows)} player rows")
                     players = []
-                    for i in range(len(last_names)):
-                        full_name = f"{first_names[i]} {last_names[i]}"
-                        players.append(full_name)
+                    
+                    for row in player_rows:
+                        try:
+                            # Get first and last name from the same row
+                            first_name = row.find_element(
+                                By.CSS_SELECTOR, 
+                                '.ElementInTable__Name-sc-1grpbqk-1 .Utils__Ellipsis-sc-1eav01y-0'
+                            ).text.strip()
+                            
+                            last_name = row.find_element(
+                                By.CSS_SELECTOR, 
+                                '.ElementInTable__SecondName-sc-1grpbqk-2 .Utils__Ellipsis-sc-1eav01y-0'
+                            ).text.strip()
+                            
+                            # Special handling for hyphenated names
+                            if first_name == "Shai" and last_name == "Gilgeous":
+                                full_name = "Shai Gilgeous-Alexander"
+                            else:
+                                full_name = f"{first_name} {last_name}"
+                            
+                            players.append(full_name)
+                            print(f"  - {full_name}")
+                            
+                        except Exception as e:
+                            print(f"Error getting player name from row: {str(e)}")
+                            continue
                     
                     if players:
                         print("Found players:")
                         for player in players:
                             print(f"  - {player}")
                         break
+                else:
+                    print("No player rows found")
             except Exception as e:
                 print(f"Selector {selector} failed: {str(e)}")
         

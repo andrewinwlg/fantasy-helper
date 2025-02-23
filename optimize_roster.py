@@ -5,6 +5,7 @@ import os
 import sqlite3
 from dataclasses import dataclass
 from typing import Dict
+from datetime import datetime
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -33,10 +34,13 @@ def get_player_data() -> pd.DataFrame:
         nsc.salary,
         psr.Fantasy_Points_Per_Game_30D as avg_fpts,
         psr.Games_Last_30D,
-        psr.Value_Per_Game_30D as value
+        psr.Value_Per_Game_30D as value,
+        pi.injury_type,
+        pi.expected_return
     FROM player_stats ps
     JOIN nba_salary_cap_players nsc ON ps.Player = nsc.name
     JOIN player_salary_stats psr ON ps.Player = psr.Player
+    LEFT JOIN player_injuries pi ON ps.Player = pi.player_name
     WHERE psr.Games_Last_30D >= 3  -- Minimum games played
     AND nsc.salary > 0
     """
@@ -47,6 +51,20 @@ def get_player_data() -> pd.DataFrame:
     # Create front_court/back_court indicators
     df['is_front_court'] = df['Pos'].str.contains('F|C')
     df['is_back_court'] = df['Pos'].str.contains('G')
+    
+    # Exclude injured players with return dates more than 2 days away
+    today = pd.Timestamp.now().normalize()
+    injured_players = df[
+        df['expected_return'].notna() & 
+        (pd.to_datetime(df['expected_return']) > today + pd.Timedelta(days=2))
+    ]['Player'].tolist()
+    
+    if injured_players:
+        print("\nAutomatically excluding the following injured players:")
+        for player in injured_players:
+            injury_info = df[df['Player'] == player].iloc[0]
+            print(f"- {player}: {injury_info['injury_type']}, Expected return: {injury_info['expected_return']}")
+        df = df[~df['Player'].isin(injured_players)]
     
     return df
 
@@ -203,7 +221,7 @@ def optimize_team_changes(
             lpSum([current_roster.loc[i, 'avg_fpts'] * drop_vars[i] for i in current_roster.index])
     
     # Define players that cannot be dropped
-    protected_players = ['Nikola Jokic']  # Add the names of players you want to protect
+    protected_players = ['Nikola Jokic','Giannis Antetokounmpo']  # Add the names of players you want to protect
     
     # Constraints
     prob += lpSum([drop_vars[i] for i in current_roster.index]) <= transactions  # Drop at most  'transactions' players
@@ -303,10 +321,13 @@ def load_current_team(file_path: str) -> pd.DataFrame:
         nsc.salary,
         psr.Fantasy_Points_Per_Game_30D as avg_fpts,
         psr.Games_Last_30D,
-        psr.Value_Per_Game_30D as value
+        psr.Value_Per_Game_30D as value,
+        pi.injury_type,
+        pi.expected_return
     FROM player_stats ps
     JOIN nba_salary_cap_players nsc ON ps.Player = nsc.name
     JOIN player_salary_stats psr ON ps.Player = psr.Player
+    LEFT JOIN player_injuries pi ON ps.Player = pi.player_name
     WHERE ps.Player IN ({', '.join(['"' + player + '"' for player in players])})
     """
     
@@ -320,6 +341,18 @@ def load_current_team(file_path: str) -> pd.DataFrame:
     # Create front_court/back_court indicators for current roster
     current_roster['is_front_court'] = current_roster['Pos'].str.contains('F|C')
     current_roster['is_back_court'] = current_roster['Pos'].str.contains('G')
+    
+    # Check for injured players
+    today = pd.Timestamp.now().normalize()
+    injured_players = current_roster[
+        current_roster['expected_return'].notna() & 
+        (pd.to_datetime(current_roster['expected_return']) > today + pd.Timedelta(days=2))
+    ]
+    
+    if not injured_players.empty:
+        print("\nWarning: The following players on your current roster are injured:")
+        for _, player in injured_players.iterrows():
+            print(f"- {player['Player']}: {player['injury_type']}, Expected return: {player['expected_return']}")
     
     return current_roster
 
@@ -390,6 +423,7 @@ def main() -> None:
     parser.add_argument('--debug', action='store_true', help='Enable debug output')
     parser.add_argument('--exclude', nargs='+', help='List of players to exclude from optimization')
     parser.add_argument('--replace', action='store_true', help='Update current_team.txt with recommended changes after confirmation')
+    parser.add_argument('--include-injured', action='store_true', help='Include injured players in optimization')
     
     args = parser.parse_args()
     salary_cap = args.salary_cap
@@ -416,10 +450,15 @@ def main() -> None:
             nsc.salary,
             psr.Fantasy_Points_Per_Game_30D as avg_fpts,
             psr.Games_Last_30D,
-            psr.Value_Per_Game_30D as value
+            psr.Value_Per_Game_30D as value,
+            pi.injury_type,
+            pi.expected_return
         FROM player_stats ps
         JOIN nba_salary_cap_players nsc ON ps.Player = nsc.name
         JOIN player_salary_stats psr ON ps.Player = psr.Player
+        LEFT JOIN player_injuries pi ON ps.Player = pi.player_name
+        WHERE psr.Games_Last_30D >= 3  -- Minimum games played
+        AND nsc.salary > 0
         """
         
         with sqlite3.connect('nba_stats.db') as conn:
@@ -431,6 +470,21 @@ def main() -> None:
         # Create front_court/back_court indicators for available players
         available_players.loc[:, 'is_front_court'] = available_players['Pos'].str.contains('F|C').astype(int)
         available_players.loc[:, 'is_back_court'] = available_players['Pos'].str.contains('G').astype(int)
+        
+        # Exclude injured players unless --include-injured is specified
+        if not args.include_injured:
+            today = pd.Timestamp.now().normalize()
+            injured_players = available_players[
+                available_players['expected_return'].notna() & 
+                (pd.to_datetime(available_players['expected_return']) > today + pd.Timedelta(days=2))
+            ]['Player'].tolist()
+            
+            if injured_players:
+                print("\nAutomatically excluding the following injured players:")
+                for player in injured_players:
+                    injury_info = available_players[available_players['Player'] == player].iloc[0]
+                    print(f"- {player}: {injury_info['injury_type']}, Expected return: {injury_info['expected_return']}")
+                available_players = available_players[~available_players['Player'].isin(injured_players)]
         
         # Call the optimization function
         optimize_team_changes(

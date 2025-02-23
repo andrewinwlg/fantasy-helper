@@ -19,6 +19,9 @@ echo "NBA scraper script started at $(date)"
 echo "Scraping team roster"
 python3 team_scraper.py
 
+echo "Scraping injury news"
+python3 injury_scraper.py
+
 echo "Updating team roster file"
 python3 utils.py --update $NBA_LOGIN
 

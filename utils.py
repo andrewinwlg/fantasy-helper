@@ -128,7 +128,7 @@ def update_team(login_id: str) -> None:
     """
     try:
         # Connect to database
-        with sqlite3.connect('nba_fantasy.db') as conn:
+        with sqlite3.connect('nba_stats.db') as conn:
             # Get latest team roster for this login_id
             query = """
             SELECT player_name 

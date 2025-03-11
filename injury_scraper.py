@@ -60,7 +60,6 @@ def init_database():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 player_name TEXT NOT NULL,
                 team TEXT NOT NULL,
-                position TEXT NOT NULL,
                 injury_type TEXT NOT NULL,
                 expected_return DATE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -212,11 +211,6 @@ def scrape_table_data(driver):
                     By.CSS_SELECTOR, '.TeamCode__StyledTeamCode-sc-t0jdgp-0 strong'
                 ).text
                 
-                # Extract position
-                position = row.find_element(
-                    By.CLASS_NAME, 'StatusTableElement__TeamPosition-sc-cq75nl-4'
-                ).text
-                
                 # Extract injury news
                 news = row.find_element(
                     By.CLASS_NAME, 'InjuryTracker__News-sc-1px8xnl-8'
@@ -229,7 +223,6 @@ def scrape_table_data(driver):
                     injury = {
                         'player_name': player_name,
                         'team': team,
-                        'position': position,
                         'injury_type': injury_type,
                         'expected_return': expected_return
                     }
@@ -325,12 +318,11 @@ def scrape_injury_news():
         for injury in all_injuries:
             cursor.execute('''
                 INSERT INTO player_injuries 
-                (player_name, team, position, injury_type, expected_return)
-                VALUES (?, ?, ?, ?, ?)
+                (player_name, team, injury_type, expected_return)
+                VALUES (?, ?, ?, ?)
             ''', (
                 injury['player_name'],
                 injury['team'],
-                injury['position'],
                 injury['injury_type'],
                 injury['expected_return']
             ))
@@ -358,7 +350,7 @@ def main():
     else:
         print(f"\nFound {len(injuries)} injuries:")
         for injury in injuries:
-            print(f"{injury['player_name']} ({injury['team']}-{injury['position']}) - "
+            print(f"{injury['player_name']} ({injury['team']}) - "
                   f"{injury['injury_type']}, Expected return: {injury['expected_return']}")
 
 if __name__ == "__main__":

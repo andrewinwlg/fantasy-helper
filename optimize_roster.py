@@ -35,14 +35,15 @@ def get_player_data() -> pd.DataFrame:
         psr.Fantasy_Points_Per_Game_30D as avg_fpts,
         psr.Games_Last_30D,
         psr.Value_Per_Game_30D as value,
-        pi.injury_type,
-        pi.expected_return
+        MAX(pi.injury_type) as injury_type,
+        MAX(pi.expected_return) as expected_return
     FROM player_stats ps
     JOIN nba_salary_cap_players nsc ON ps.Player = nsc.name
     JOIN player_salary_stats psr ON ps.Player = psr.Player
     LEFT JOIN player_injuries pi ON ps.Player = pi.player_name
     WHERE psr.Games_Last_30D >= 3  -- Minimum games played
     AND nsc.salary > 0
+    GROUP BY ps.Player, ps.Pos, ps.Team, nsc.salary, psr.Fantasy_Points_Per_Game_30D, psr.Games_Last_30D, psr.Value_Per_Game_30D
     """
     
     with sqlite3.connect('nba_stats.db') as conn:
@@ -223,6 +224,32 @@ def optimize_team_changes(
     # Define players that cannot be dropped
     protected_players = ['Nikola Jokic','Giannis Antetokounmpo']  # Add the names of players you want to protect
     
+    # Debug: Print expected_return for all players
+    print("\nDebug - Current roster expected_return dates:")
+    for idx, player in current_roster.iterrows():
+        print(f"{player['Player']}: {player['expected_return']}")
+    
+    # Identify injured players with return dates more than 2 weeks away
+    today = pd.Timestamp.now().normalize()
+    print(f"Today's date: {today}")
+    print(f"Cutoff date for long-term injuries: {today + pd.Timedelta(days=4)}")
+    
+    # Convert expected_return to datetime
+    current_roster['expected_return_dt'] = pd.to_datetime(current_roster['expected_return'], errors='coerce')
+    
+    # Debug: Print converted dates
+    print("\nDebug - Converted dates:")
+    for idx, player in current_roster.iterrows():
+        if pd.notna(player['expected_return_dt']):
+            print(f"{player['Player']}: {player['expected_return_dt']} - Is long term: {player['expected_return_dt'] > today + pd.Timedelta(days=4)}")
+    
+    long_term_injured_players = current_roster[
+        current_roster['expected_return_dt'].notna() & 
+        (current_roster['expected_return_dt'] > today + pd.Timedelta(days=4))
+    ]
+    
+    print(f"\nFound {len(long_term_injured_players)} long-term injured players")
+    
     # Constraints
     prob += lpSum([drop_vars[i] for i in current_roster.index]) <= transactions  # Drop at most  'transactions' players
     prob += lpSum([add_vars[i] for i in available_players.index]) <= transactions  # Add at most 'transactions' players
@@ -241,7 +268,15 @@ def optimize_team_changes(
         player_index = current_roster[current_roster['Player'] == player].index
         if not player_index.empty:
             prob += drop_vars[player_index[0]] == 0  # Set drop variable to 0 for protected players
-
+    
+    # Add constraints to force dropping long-term injured players
+    if not long_term_injured_players.empty:
+        print("\nPrioritizing dropping the following long-term injured players:")
+        for _, player in long_term_injured_players.iterrows():
+            print(f"- {player['Player']}: {player['injury_type']}, Expected return: {player['expected_return']}")
+            # Force the optimizer to drop this player
+            prob += drop_vars[player.name] == 1
+    
     # Debugging: Print the constraints if debug_flag is set
     if debug_flag:
         print("Constraints:")
@@ -322,13 +357,14 @@ def load_current_team(file_path: str) -> pd.DataFrame:
         psr.Fantasy_Points_Per_Game_30D as avg_fpts,
         psr.Games_Last_30D,
         psr.Value_Per_Game_30D as value,
-        pi.injury_type,
-        pi.expected_return
+        MAX(pi.injury_type) as injury_type,
+        MAX(pi.expected_return) as expected_return
     FROM player_stats ps
     JOIN nba_salary_cap_players nsc ON ps.Player = nsc.name
     JOIN player_salary_stats psr ON ps.Player = psr.Player
     LEFT JOIN player_injuries pi ON ps.Player = pi.player_name
     WHERE ps.Player IN ({', '.join(['"' + player + '"' for player in players])})
+    GROUP BY ps.Player, ps.Pos, ps.Team, nsc.salary, psr.Fantasy_Points_Per_Game_30D, psr.Games_Last_30D, psr.Value_Per_Game_30D
     """
     
     with sqlite3.connect('nba_stats.db') as conn:
@@ -451,14 +487,15 @@ def main() -> None:
             psr.Fantasy_Points_Per_Game_30D as avg_fpts,
             psr.Games_Last_30D,
             psr.Value_Per_Game_30D as value,
-            pi.injury_type,
-            pi.expected_return
+            MAX(pi.injury_type) as injury_type,
+            MAX(pi.expected_return) as expected_return
         FROM player_stats ps
         JOIN nba_salary_cap_players nsc ON ps.Player = nsc.name
         JOIN player_salary_stats psr ON ps.Player = psr.Player
         LEFT JOIN player_injuries pi ON ps.Player = pi.player_name
         WHERE psr.Games_Last_30D >= 3  -- Minimum games played
         AND nsc.salary > 0
+        GROUP BY ps.Player, ps.Pos, ps.Team, nsc.salary, psr.Fantasy_Points_Per_Game_30D, psr.Games_Last_30D, psr.Value_Per_Game_30D
         """
         
         with sqlite3.connect('nba_stats.db') as conn:

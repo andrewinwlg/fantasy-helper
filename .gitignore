@@ -18,3 +18,5 @@ current_team.txt
 backup/
 
 debug*
+.env
+current_team_backup_20250304_213709.txt

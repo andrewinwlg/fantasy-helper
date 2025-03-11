@@ -35,15 +35,22 @@ def get_player_data() -> pd.DataFrame:
         psr.Fantasy_Points_Per_Game_30D as avg_fpts,
         psr.Games_Last_30D,
         psr.Value_Per_Game_30D as value,
-        MAX(pi.injury_type) as injury_type,
-        MAX(pi.expected_return) as expected_return
+        pi.injury_type,
+        pi.expected_return
     FROM player_stats ps
     JOIN nba_salary_cap_players nsc ON ps.Player = nsc.name
     JOIN player_salary_stats psr ON ps.Player = psr.Player
-    LEFT JOIN player_injuries pi ON ps.Player = pi.player_name
+    LEFT JOIN (
+        SELECT pi1.* 
+        FROM player_injuries pi1
+        INNER JOIN (
+            SELECT player_name, MAX(report_date) as max_date
+            FROM player_injuries
+            GROUP BY player_name
+        ) pi2 ON pi1.player_name = pi2.player_name AND pi1.report_date = pi2.max_date
+    ) pi ON ps.Player = pi.player_name
     WHERE psr.Games_Last_30D >= 3  -- Minimum games played
     AND nsc.salary > 0
-    GROUP BY ps.Player, ps.Pos, ps.Team, nsc.salary, psr.Fantasy_Points_Per_Game_30D, psr.Games_Last_30D, psr.Value_Per_Game_30D
     """
     
     with sqlite3.connect('nba_stats.db') as conn:
@@ -357,14 +364,21 @@ def load_current_team(file_path: str) -> pd.DataFrame:
         psr.Fantasy_Points_Per_Game_30D as avg_fpts,
         psr.Games_Last_30D,
         psr.Value_Per_Game_30D as value,
-        MAX(pi.injury_type) as injury_type,
-        MAX(pi.expected_return) as expected_return
+        pi.injury_type,
+        pi.expected_return
     FROM player_stats ps
     JOIN nba_salary_cap_players nsc ON ps.Player = nsc.name
     JOIN player_salary_stats psr ON ps.Player = psr.Player
-    LEFT JOIN player_injuries pi ON ps.Player = pi.player_name
+    LEFT JOIN (
+        SELECT pi1.* 
+        FROM player_injuries pi1
+        INNER JOIN (
+            SELECT player_name, MAX(report_date) as max_date
+            FROM player_injuries
+            GROUP BY player_name
+        ) pi2 ON pi1.player_name = pi2.player_name AND pi1.report_date = pi2.max_date
+    ) pi ON ps.Player = pi.player_name
     WHERE ps.Player IN ({', '.join(['"' + player + '"' for player in players])})
-    GROUP BY ps.Player, ps.Pos, ps.Team, nsc.salary, psr.Fantasy_Points_Per_Game_30D, psr.Games_Last_30D, psr.Value_Per_Game_30D
     """
     
     with sqlite3.connect('nba_stats.db') as conn:
@@ -487,15 +501,22 @@ def main() -> None:
             psr.Fantasy_Points_Per_Game_30D as avg_fpts,
             psr.Games_Last_30D,
             psr.Value_Per_Game_30D as value,
-            MAX(pi.injury_type) as injury_type,
-            MAX(pi.expected_return) as expected_return
+            pi.injury_type,
+            pi.expected_return
         FROM player_stats ps
         JOIN nba_salary_cap_players nsc ON ps.Player = nsc.name
         JOIN player_salary_stats psr ON ps.Player = psr.Player
-        LEFT JOIN player_injuries pi ON ps.Player = pi.player_name
+        LEFT JOIN (
+            SELECT pi1.* 
+            FROM player_injuries pi1
+            INNER JOIN (
+                SELECT player_name, MAX(report_date) as max_date
+                FROM player_injuries
+                GROUP BY player_name
+            ) pi2 ON pi1.player_name = pi2.player_name AND pi1.report_date = pi2.max_date
+        ) pi ON ps.Player = pi.player_name
         WHERE psr.Games_Last_30D >= 3  -- Minimum games played
         AND nsc.salary > 0
-        GROUP BY ps.Player, ps.Pos, ps.Team, nsc.salary, psr.Fantasy_Points_Per_Game_30D, psr.Games_Last_30D, psr.Value_Per_Game_30D
         """
         
         with sqlite3.connect('nba_stats.db') as conn:

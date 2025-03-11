@@ -5,6 +5,7 @@ import sqlite3
 import time
 from datetime import datetime
 from pathlib import Path
+import argparse
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -62,9 +63,17 @@ def init_database():
                 team TEXT NOT NULL,
                 injury_type TEXT NOT NULL,
                 expected_return DATE,
+                report_date DATE NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # Create an index on player_name and report_date to ensure uniqueness
+        cursor.execute('''
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_player_report_date 
+            ON player_injuries (player_name, report_date)
+        ''')
+        
         conn.commit()
     finally:
         conn.close()
@@ -250,6 +259,7 @@ def scrape_injury_news():
     conn = None
     current_page = 1
     max_pages = 8  # We know there are 8 pages
+    today = datetime.now().date()
     
     try:
         # Navigate to injury news page
@@ -315,19 +325,28 @@ def scrape_injury_news():
         conn = sqlite3.connect('nba_stats.db')
         cursor = conn.cursor()
         
+        # Delete today's injury records before inserting new ones
+        print(f"Deleting injury records for today ({today})")
+        cursor.execute('DELETE FROM player_injuries WHERE report_date = ?', (today,))
+        deleted_count = cursor.rowcount
+        print(f"Deleted {deleted_count} existing records for today")
+        
+        # Insert new records with today's date
         for injury in all_injuries:
             cursor.execute('''
                 INSERT INTO player_injuries 
-                (player_name, team, injury_type, expected_return)
-                VALUES (?, ?, ?, ?)
+                (player_name, team, injury_type, expected_return, report_date)
+                VALUES (?, ?, ?, ?, ?)
             ''', (
                 injury['player_name'],
                 injury['team'],
                 injury['injury_type'],
-                injury['expected_return']
+                injury['expected_return'],
+                today
             ))
         
         conn.commit()
+        print(f"Inserted {len(all_injuries)} new injury records for today")
         
     except Exception as e:
         print(f"Error scraping injury news: {str(e)}")
@@ -340,9 +359,30 @@ def scrape_injury_news():
     
     return all_injuries
 
+def truncate_injury_table():
+    """Truncate the player_injuries table."""
+    conn = sqlite3.connect('nba_stats.db')
+    try:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM player_injuries')
+        deleted_count = cursor.rowcount
+        conn.commit()
+        print(f"Truncated player_injuries table, deleted {deleted_count} records")
+    finally:
+        conn.close()
+
 def main():
     """Main function to run the scraper."""
+    parser = argparse.ArgumentParser(description='NBA Injury Scraper')
+    parser.add_argument('--truncate', action='store_true', help='Truncate the player_injuries table before scraping')
+    args = parser.parse_args()
+    
     print("Starting injury news scraper")
+    
+    if args.truncate:
+        print("Truncating player_injuries table as requested")
+        truncate_injury_table()
+    
     injuries = scrape_injury_news()
     
     if not injuries:

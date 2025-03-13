@@ -33,7 +33,11 @@ def get_player_data() -> pd.DataFrame:
         ps.Team,
         nsc.salary,
         psr.Fantasy_Points_Per_Game_30D as avg_fpts,
+        psr.Fantasy_Points_Per_Game_15D,
+        psr.Fantasy_Points_Per_Game_7D,
         psr.Games_Last_30D,
+        psr.Games_Last_15D,
+        psr.Games_Last_7D,
         psr.Value_Per_Game_30D as value,
         pi.injury_type,
         pi.expected_return
@@ -81,7 +85,8 @@ def optimize_roster(
     salary_cap: float = 100.0,
     constraints: RosterConstraints = RosterConstraints(),
     excluded_players: list = None,
-    debug_flag: bool = False
+    debug_flag: bool = False,
+    weights: dict = None
 ) -> pd.DataFrame:
     """Optimize roster using linear programming."""
     
@@ -111,11 +116,24 @@ def optimize_roster(
     if len(df) < 10:
         raise ValueError(f"Not enough players ({len(df)}) to create a valid roster after exclusions")
     
+    # Calculate composite score if weights are provided
+    if weights:
+        df = calculate_composite_score(df, weights)
+        # Use composite score for optimization
+        objective_column = 'composite_score'
+        print("\nUsing composite score for optimization with weights:")
+        for key, value in weights.items():
+            print(f"  {key}: {value}")
+    else:
+        # Use 30-day average if no weights provided
+        objective_column = 'avg_fpts'
+        print("\nUsing 30-day average fantasy points for optimization")
+    
     prob = LpProblem("NBA_Fantasy_Roster", LpMaximize)
     player_vars = LpVariable.dicts("players", ((i) for i in df.index), 0, 1, 'Binary')
     
-    # Objective: Maximize total fantasy points
-    prob += lpSum([df.loc[i, 'avg_fpts'] * player_vars[i] for i in df.index])
+    # Objective: Maximize total fantasy points or composite score
+    prob += lpSum([df.loc[i, objective_column] * player_vars[i] for i in df.index])
     
     # Constraints
     prob += lpSum([df.loc[i, 'salary'] * player_vars[i] for i in df.index]) <= salary_cap
@@ -135,57 +153,99 @@ def optimize_roster(
     if debug_flag:
         print(f"\nOptimization Status: {pulp.LpStatus[prob.status]}")
     
-    return get_selected_players(df, player_vars)
+    return get_selected_players(df, player_vars, objective_column)
 
-def get_selected_players(df: pd.DataFrame, player_vars: Dict) -> pd.DataFrame:
+def get_selected_players(df: pd.DataFrame, player_vars: Dict, objective_column: str = 'avg_fpts') -> pd.DataFrame:
     """Get selected players from optimization results."""
     selected_players = []
     for i in df.index:
         if player_vars[i].value() == 1:
-            selected_players.append({
+            player_data = {
                 'Player': df.loc[i, 'Player'],
                 'Position': df.loc[i, 'Pos'],
                 'Team': df.loc[i, 'Team'],
                 'Salary': df.loc[i, 'salary'],
                 'Avg_Fantasy_Points': df.loc[i, 'avg_fpts'],
                 'Value': df.loc[i, 'value']
-            })
+            }
+            
+            # Add additional metrics if available
+            if 'Fantasy_Points_Per_Game_15D' in df.columns:
+                player_data['Avg_15D'] = df.loc[i, 'Fantasy_Points_Per_Game_15D']
+            
+            if 'Fantasy_Points_Per_Game_7D' in df.columns:
+                player_data['Avg_7D'] = df.loc[i, 'Fantasy_Points_Per_Game_7D']
+                
+            if 'consistency_score' in df.columns:
+                player_data['Consistency'] = df.loc[i, 'consistency_score']
+                
+            if 'recent_trend_norm' in df.columns:
+                player_data['Trend'] = df.loc[i, 'recent_trend_norm']
+                
+            if 'composite_score' in df.columns:
+                player_data['Composite_Score'] = df.loc[i, 'composite_score']
+                
+            selected_players.append(player_data)
     
-    return pd.DataFrame(selected_players)
+    result_df = pd.DataFrame(selected_players)
+    
+    # Sort by the objective column used in optimization
+    if objective_column in df.columns and objective_column != 'avg_fpts':
+        sort_column = 'Composite_Score' if objective_column == 'composite_score' else objective_column
+        if sort_column in result_df.columns:
+            result_df = result_df.sort_values(sort_column, ascending=False)
+    else:
+        result_df = result_df.sort_values('Avg_Fantasy_Points', ascending=False)
+    
+    return result_df
 
 def visualize_roster(roster: pd.DataFrame) -> None:
     """Create visualizations for the optimal roster."""
     sns.set(style='whitegrid')
     
     # Create figure with subplots
-    fig = plt.figure(figsize=(15, 10))
+    fig = plt.figure(figsize=(15, 15))
     
     # 1. Salary distribution
-    plt.subplot(2, 2, 1)
+    plt.subplot(3, 2, 1)
     sns.barplot(data=roster, x='Position', y='Salary')
     plt.title('Salary Distribution by Position')
     plt.xticks(rotation=45)
     
-    # 2. Fantasy points by player
-    plt.subplot(2, 2, 2)
-    sns.barplot(data=roster.sort_values('Avg_Fantasy_Points', ascending=False), 
-                x='Player', y='Avg_Fantasy_Points')
-    plt.title('Projected Fantasy Points by Player')
+    # 2. Fantasy points by player (30D)
+    plt.subplot(3, 2, 2)
+    sns.barplot(data=roster.sort_values('Avg_Fantasy_Points_30D', ascending=False), 
+                x='Player', y='Avg_Fantasy_Points_30D')
+    plt.title('30-Day Fantasy Points by Player')
     plt.xticks(rotation=45)
     
     # 3. Team distribution
-    plt.subplot(2, 2, 3)
+    plt.subplot(3, 2, 3)
     team_counts = roster['Team'].value_counts()
     sns.barplot(x=team_counts.index, y=team_counts.values)
     plt.title('Players per Team')
     plt.xticks(rotation=45)
     
-    # 4. Value (points per salary dollar)
-    plt.subplot(2, 2, 4)
-    sns.scatterplot(data=roster, x='Salary', y='Avg_Fantasy_Points')
-    plt.title('Fantasy Points vs Salary')
+    # 4. Composite score by player
+    plt.subplot(3, 2, 4)
+    sns.barplot(data=roster.sort_values('Composite_Score', ascending=False), 
+                x='Player', y='Composite_Score')
+    plt.title('Composite Score by Player')
+    plt.xticks(rotation=45)
+    
+    # 5. Consistency by player
+    plt.subplot(3, 2, 5)
+    sns.barplot(data=roster.sort_values('Consistency', ascending=False), 
+                x='Player', y='Consistency')
+    plt.title('Consistency Score by Player')
+    plt.xticks(rotation=45)
+    
+    # 6. Fantasy points vs Salary
+    plt.subplot(3, 2, 6)
+    sns.scatterplot(data=roster, x='Salary', y='Composite_Score')
+    plt.title('Composite Score vs Salary')
     for i, row in roster.iterrows():
-        plt.annotate(row['Player'], (row['Salary'], row['Avg_Fantasy_Points']))
+        plt.annotate(row['Player'], (row['Salary'], row['Composite_Score']))
     
     plt.tight_layout()
     plt.show()
@@ -197,7 +257,8 @@ def optimize_team_changes(
     transactions: int = 2,
     excluded_players: list = None,
     debug_flag: bool = False,
-    replace: bool = False
+    replace: bool = False,
+    weights: dict = None
 ) -> None:
     """Optimize which players to drop and which to add."""
     
@@ -215,6 +276,18 @@ def optimize_team_changes(
         excluded_count = initial_count - len(available_players)
         print(f"Excluded {excluded_count} players from available players pool")
     
+    # Calculate composite scores if weights are provided
+    if weights:
+        current_roster = calculate_composite_score(current_roster, weights)
+        available_players = calculate_composite_score(available_players, weights)
+        objective_column = 'composite_score'
+        print("\nUsing composite score for optimization with weights:")
+        for key, value in weights.items():
+            print(f"  {key}: {value}")
+    else:
+        objective_column = 'avg_fpts'
+        print("\nUsing 30-day average fantasy points for optimization")
+    
     # Create the model
     prob = LpProblem("NBA_Team_Changes", LpMaximize)
     
@@ -224,9 +297,9 @@ def optimize_team_changes(
     # Create binary variables for available players (to add)
     add_vars = LpVariable.dicts("add", ((i) for i in available_players.index), 0, 1, 'Binary')
     
-    # Objective: Maximize total fantasy points after changes
-    prob += lpSum([available_players.loc[i, 'avg_fpts'] * add_vars[i] for i in available_players.index]) - \
-            lpSum([current_roster.loc[i, 'avg_fpts'] * drop_vars[i] for i in current_roster.index])
+    # Objective: Maximize total fantasy points or composite score after changes
+    prob += lpSum([available_players.loc[i, objective_column] * add_vars[i] for i in available_players.index]) - \
+            lpSum([current_roster.loc[i, objective_column] * drop_vars[i] for i in current_roster.index])
     
     # Define players that cannot be dropped
     protected_players = ['Nikola Jokic','Giannis Antetokounmpo']  # Add the names of players you want to protect
@@ -362,7 +435,11 @@ def load_current_team(file_path: str) -> pd.DataFrame:
         ps.Team,
         nsc.salary,
         psr.Fantasy_Points_Per_Game_30D as avg_fpts,
+        psr.Fantasy_Points_Per_Game_15D,
+        psr.Fantasy_Points_Per_Game_7D,
         psr.Games_Last_30D,
+        psr.Games_Last_15D,
+        psr.Games_Last_7D,
         psr.Value_Per_Game_30D as value,
         pi.injury_type,
         pi.expected_return
@@ -432,13 +509,58 @@ def print_optimization_results(current_roster: pd.DataFrame, available_players: 
         for i in available_players.index if add_vars[i].value() == 1
     ]
     
+    # Add composite score if available
+    if 'composite_score' in current_roster.columns:
+        for i, player in enumerate(players_to_drop):
+            idx = current_roster[current_roster['Player'] == player['Player']].index[0]
+            players_to_drop[i]['Composite_Score'] = current_roster.loc[idx, 'composite_score']
+            
+            # Add other metrics if available
+            if 'Fantasy_Points_Per_Game_15D' in current_roster.columns:
+                players_to_drop[i]['Avg_15D'] = current_roster.loc[idx, 'Fantasy_Points_Per_Game_15D']
+            if 'Fantasy_Points_Per_Game_7D' in current_roster.columns:
+                players_to_drop[i]['Avg_7D'] = current_roster.loc[idx, 'Fantasy_Points_Per_Game_7D']
+            if 'consistency_score' in current_roster.columns:
+                players_to_drop[i]['Consistency'] = current_roster.loc[idx, 'consistency_score']
+            if 'recent_trend_norm' in current_roster.columns:
+                players_to_drop[i]['Trend'] = current_roster.loc[idx, 'recent_trend_norm']
+    
+    if 'composite_score' in available_players.columns:
+        for i, player in enumerate(players_to_add):
+            idx = available_players[available_players['Player'] == player['Player']].index[0]
+            players_to_add[i]['Composite_Score'] = available_players.loc[idx, 'composite_score']
+            
+            # Add other metrics if available
+            if 'Fantasy_Points_Per_Game_15D' in available_players.columns:
+                players_to_add[i]['Avg_15D'] = available_players.loc[idx, 'Fantasy_Points_Per_Game_15D']
+            if 'Fantasy_Points_Per_Game_7D' in available_players.columns:
+                players_to_add[i]['Avg_7D'] = available_players.loc[idx, 'Fantasy_Points_Per_Game_7D']
+            if 'consistency_score' in available_players.columns:
+                players_to_add[i]['Consistency'] = available_players.loc[idx, 'consistency_score']
+            if 'recent_trend_norm' in available_players.columns:
+                players_to_add[i]['Trend'] = available_players.loc[idx, 'recent_trend_norm']
+    
     print("\nPlayers to drop:")
     for player in players_to_drop:
-        print(f"{player['Player']} ({player['Position']}) - Salary: {player['Salary']}, Avg Points: {player['Avg_Fantasy_Points']:.1f}, Value: {player['Value']:.2f}")
+        output = f"{player['Player']} ({player['Position']}) - Salary: {player['Salary']}, Avg Points: {player['Avg_Fantasy_Points']:.1f}, Value: {player['Value']:.2f}"
+        if 'Composite_Score' in player:
+            output += f", Composite: {player['Composite_Score']:.1f}"
+        if 'Consistency' in player:
+            output += f", Consistency: {player['Consistency']:.2f}"
+        if 'Trend' in player:
+            output += f", Trend: {player['Trend']:.2f}"
+        print(output)
     
     print("\nPlayers to add:")
     for player in players_to_add:
-        print(f"{player['Player']} ({player['Position']}) - Salary: {player['Salary']}, Avg Points: {player['Avg_Fantasy_Points']:.1f}, Value: {player['Value']:.2f}")
+        output = f"{player['Player']} ({player['Position']}) - Salary: {player['Salary']}, Avg Points: {player['Avg_Fantasy_Points']:.1f}, Value: {player['Value']:.2f}"
+        if 'Composite_Score' in player:
+            output += f", Composite: {player['Composite_Score']:.1f}"
+        if 'Consistency' in player:
+            output += f", Consistency: {player['Consistency']:.2f}"
+        if 'Trend' in player:
+            output += f", Trend: {player['Trend']:.2f}"
+        print(output)
 
     # Calculate total salary and total average fantasy points before changes
     total_salary_before = current_roster['salary'].sum()
@@ -446,6 +568,10 @@ def print_optimization_results(current_roster: pd.DataFrame, available_players: 
     
     print(f"\nTotal Salary before changes: {total_salary_before:.2f}")
     print(f"Total Average Fantasy Points before changes: {total_avg_fantasy_points_before:.2f}")
+    
+    if 'composite_score' in current_roster.columns:
+        total_composite_before = current_roster['composite_score'].sum()
+        print(f"Total Composite Score before changes: {total_composite_before:.2f}")
 
     # Calculate total salary and total average fantasy points after changes
     total_salary_after = (
@@ -462,8 +588,78 @@ def print_optimization_results(current_roster: pd.DataFrame, available_players: 
     
     print(f"Total Salary after changes: {total_salary_after:.2f}")
     print(f"Total Average Fantasy Points after changes: {total_avg_fantasy_points_after:.2f}")
+    
+    if 'composite_score' in current_roster.columns and 'composite_score' in available_players.columns:
+        total_composite_after = (
+            total_composite_before - 
+            sum(current_roster.loc[i, 'composite_score'] for i in current_roster.index if drop_vars[i].value() == 1) + 
+            sum(available_players.loc[i, 'composite_score'] for i in available_players.index if add_vars[i].value() == 1)
+        )
+        print(f"Total Composite Score after changes: {total_composite_after:.2f}")
 
     return players_to_drop, players_to_add
+
+def calculate_composite_score(df: pd.DataFrame, weights: dict = None) -> pd.DataFrame:
+    """
+    Calculate a composite score based on multiple time periods and consistency metrics.
+    
+    Args:
+        df: DataFrame containing player stats
+        weights: Dictionary of weights for different metrics. If None, default weights are used.
+            Possible keys: 'avg_30d', 'avg_15d', 'avg_7d', 'consistency', 'recent_trend'
+    
+    Returns:
+        DataFrame with added composite_score column
+    """
+    # Make a copy to avoid modifying the original
+    result_df = df.copy()
+    
+    # Default weights if none provided
+    if weights is None:
+        weights = {
+            'avg_30d': 0.4,    # 30-day average (stability)
+            'avg_15d': 0.3,    # 15-day average (medium-term)
+            'avg_7d': 0.3,     # 7-day average (recent performance)
+            'consistency': 0.5, # How much to penalize inconsistency
+            'recent_trend': 0.5 # How much to reward/penalize recent trend
+        }
+    
+    # Convert expected_return to datetime
+    result_df['expected_return_dt'] = pd.to_datetime(result_df['expected_return'], errors='coerce')
+    
+    # Calculate standard deviations for consistency measure
+    # Lower standard deviation means more consistent performance
+    result_df['std_30d'] = result_df['avg_fpts'] * 0.5  # Approximation if actual std not available
+    
+    # Calculate consistency score (inverse of standard deviation, normalized)
+    if 'std_30d' in result_df.columns:
+        max_std = result_df['std_30d'].max()
+        if max_std > 0:
+            result_df['consistency_score'] = 1 - (result_df['std_30d'] / max_std)
+        else:
+            result_df['consistency_score'] = 1.0
+    else:
+        result_df['consistency_score'] = 1.0  # Default if std not available
+    
+    # Calculate recent trend (comparing 7-day to 30-day average)
+    if 'Fantasy_Points_Per_Game_7D' in result_df.columns and 'avg_fpts' in result_df.columns:
+        result_df['recent_trend'] = result_df['Fantasy_Points_Per_Game_7D'] / result_df['avg_fpts'] - 1
+        # Normalize trend between -1 and 1
+        max_trend = max(result_df['recent_trend'].abs().max(), 0.5)  # At least 0.5 to avoid extreme normalization
+        result_df['recent_trend_norm'] = result_df['recent_trend'] / max_trend
+    else:
+        result_df['recent_trend_norm'] = 0  # Default if trend can't be calculated
+    
+    # Calculate the composite score
+    result_df['composite_score'] = (
+        weights['avg_30d'] * result_df['avg_fpts'] +
+        weights.get('avg_15d', 0) * result_df.get('Fantasy_Points_Per_Game_15D', result_df['avg_fpts']) +
+        weights.get('avg_7d', 0) * result_df.get('Fantasy_Points_Per_Game_7D', result_df['avg_fpts']) +
+        weights['consistency'] * result_df['consistency_score'] * result_df['avg_fpts'] * 0.2 +  # Scale consistency impact
+        weights['recent_trend'] * result_df['recent_trend_norm'] * result_df['avg_fpts'] * 0.2    # Scale trend impact
+    )
+    
+    return result_df
 
 def main() -> None:
     """Main function to run the optimization."""
@@ -475,12 +671,44 @@ def main() -> None:
     parser.add_argument('--replace', action='store_true', help='Update current_team.txt with recommended changes after confirmation')
     parser.add_argument('--include-injured', action='store_true', help='Include injured players in optimization')
     
+    # Add arguments for composite score weights
+    parser.add_argument('--weight-30d', type=float, default=0.4, help='Weight for 30-day average (default: 0.4)')
+    parser.add_argument('--weight-15d', type=float, default=0.3, help='Weight for 15-day average (default: 0.3)')
+    parser.add_argument('--weight-7d', type=float, default=0.3, help='Weight for 7-day average (default: 0.3)')
+    parser.add_argument('--consistency-bonus', type=float, default=0.5, help='Weight for consistency bonus (default: 0.5)')
+    parser.add_argument('--trend-weight', type=float, default=0.5, help='Weight for recent trend (default: 0.5)')
+    parser.add_argument('--min-games-7d', type=int, default=2, help='Minimum games in last 7 days (default: 2)')
+    parser.add_argument('--min-games-15d', type=int, default=4, help='Minimum games in last 15 days (default: 4)')
+    parser.add_argument('--no-composite', action='store_true', help='Disable composite score and use only 30-day average')
+    
     args = parser.parse_args()
     salary_cap = args.salary_cap
     transactions = args.transactions
     debug_flag = args.debug
     excluded_players = args.exclude if args.exclude else []
     replace = args.replace
+    
+    # Create weights dictionary from command-line arguments
+    weights = None
+    if not args.no_composite:
+        weights = {
+            'avg_30d': args.weight_30d,
+            'avg_15d': args.weight_15d,
+            'avg_7d': args.weight_7d,
+            'consistency': args.consistency_bonus,
+            'recent_trend': args.trend_weight,
+            'min_games_7d': args.min_games_7d,
+            'min_games_15d': args.min_games_15d
+        }
+        
+        # Normalize time period weights to sum to 1.0
+        time_period_sum = weights['avg_30d'] + weights['avg_15d'] + weights['avg_7d']
+        if time_period_sum != 1.0:
+            weights['avg_30d'] /= time_period_sum
+            weights['avg_15d'] /= time_period_sum
+            weights['avg_7d'] /= time_period_sum
+            print(f"\nNormalized time period weights: 30d={weights['avg_30d']:.2f}, " +
+                  f"15d={weights['avg_15d']:.2f}, 7d={weights['avg_7d']:.2f}")
     
     if excluded_players:
         print(f"\nExcluding the following players from optimization: {excluded_players}")
@@ -499,7 +727,11 @@ def main() -> None:
             ps.Team,
             nsc.salary,
             psr.Fantasy_Points_Per_Game_30D as avg_fpts,
+            psr.Fantasy_Points_Per_Game_15D,
+            psr.Fantasy_Points_Per_Game_7D,
             psr.Games_Last_30D,
+            psr.Games_Last_15D,
+            psr.Games_Last_7D,
             psr.Value_Per_Game_30D as value,
             pi.injury_type,
             pi.expected_return
@@ -552,7 +784,8 @@ def main() -> None:
             transactions=transactions,
             excluded_players=excluded_players,
             debug_flag=debug_flag,
-            replace=replace
+            replace=replace,
+            weights=weights
         )
     else:
         # If no file, run the full optimization
@@ -561,7 +794,8 @@ def main() -> None:
             df, 
             salary_cap=salary_cap, 
             debug_flag=debug_flag,
-            excluded_players=excluded_players
+            excluded_players=excluded_players,
+            weights=weights
         )
         
         print("\nOptimal Roster:")
@@ -569,6 +803,9 @@ def main() -> None:
         
         print(f"\nTotal Salary: {optimal_roster['Salary'].sum():.1f}")
         print(f"Projected Fantasy Points: {optimal_roster['Avg_Fantasy_Points'].sum():.1f}")
+        
+        if 'Composite_Score' in optimal_roster.columns:
+            print(f"Composite Score: {optimal_roster['Composite_Score'].sum():.1f}")
         
         print("\nTeam Distribution:")
         print(optimal_roster['Team'].value_counts())

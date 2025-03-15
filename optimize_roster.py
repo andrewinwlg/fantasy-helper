@@ -627,11 +627,16 @@ def calculate_composite_score(df: pd.DataFrame, weights: dict = None) -> pd.Data
     # Convert expected_return to datetime
     result_df['expected_return_dt'] = pd.to_datetime(result_df['expected_return'], errors='coerce')
     
-    # Calculate standard deviations for consistency measure
-    # Lower standard deviation means more consistent performance
+    # CONSISTENCY CALCULATION
+    # ----------------------
+    # We approximate standard deviation as 50% of average points
+    # Higher std_dev = more variance = less consistency
     result_df['std_30d'] = result_df['avg_fpts'] * 0.5  # Approximation if actual std not available
     
     # Calculate consistency score (inverse of standard deviation, normalized)
+    # Score ranges from 0 to 1:
+    # - 1 = most consistent player (e.g., player who scores ~same points every game)
+    # - 0 = least consistent player (e.g., player with extreme game-to-game variance)
     if 'std_30d' in result_df.columns:
         max_std = result_df['std_30d'].max()
         if max_std > 0:
@@ -641,16 +646,28 @@ def calculate_composite_score(df: pd.DataFrame, weights: dict = None) -> pd.Data
     else:
         result_df['consistency_score'] = 1.0  # Default if std not available
     
-    # Calculate recent trend (comparing 7-day to 30-day average)
+    # RECENT TREND CALCULATION
+    # -----------------------
+    # Compare 7-day average to 30-day average to identify improving/declining players
+    # Positive value = player is improving, Negative value = player is declining
     if 'Fantasy_Points_Per_Game_7D' in result_df.columns and 'avg_fpts' in result_df.columns:
         result_df['recent_trend'] = result_df['Fantasy_Points_Per_Game_7D'] / result_df['avg_fpts'] - 1
-        # Normalize trend between -1 and 1
+        # Normalize trend between -1 and 1:
+        # - 1 = strongest positive trend (e.g., player who recently became starter)
+        # - 0 = no trend (recent performance matches longer-term average)
+        # - -1 = strongest negative trend (e.g., player with reduced minutes/role)
         max_trend = max(result_df['recent_trend'].abs().max(), 0.5)  # At least 0.5 to avoid extreme normalization
         result_df['recent_trend_norm'] = result_df['recent_trend'] / max_trend
     else:
         result_df['recent_trend_norm'] = 0  # Default if trend can't be calculated
     
     # Calculate the composite score
+    # The composite score consists of:
+    # 1. Weighted average of fantasy points from different time periods (30d, 15d, 7d)
+    # 2. Consistency bonus: With default weight of 0.5, adds up to 10% of avg_fpts for perfectly consistent players
+    #    (consistency_score ranges from 0-1, multiplied by 0.2 scaling factor and 0.5 weight)
+    # 3. Recent trend adjustment: With default weight of 0.5, can add up to 10% of avg_fpts for strongly improving players
+    #    or subtract up to 10% for strongly declining players (trend_norm ranges from -1 to 1)
     result_df['composite_score'] = (
         weights['avg_30d'] * result_df['avg_fpts'] +
         weights.get('avg_15d', 0) * result_df.get('Fantasy_Points_Per_Game_15D', result_df['avg_fpts']) +
@@ -658,6 +675,13 @@ def calculate_composite_score(df: pd.DataFrame, weights: dict = None) -> pd.Data
         weights['consistency'] * result_df['consistency_score'] * result_df['avg_fpts'] * 0.2 +  # Scale consistency impact
         weights['recent_trend'] * result_df['recent_trend_norm'] * result_df['avg_fpts'] * 0.2    # Scale trend impact
     )
+    
+    # Note on consistency and trend impact:
+    # - With default weights (0.5), consistency contributes: 0.5 * consistency_score * avg_fpts * 0.2
+    #   Maximum contribution is 0.5 * 1.0 * avg_fpts * 0.2 = 0.1 * avg_fpts (10% bonus)
+    # - With default weights (0.5), trend contributes: 0.5 * trend_norm * avg_fpts * 0.2
+    #   Maximum contribution ranges from -0.1 * avg_fpts to +0.1 * avg_fpts (-10% to +10%)
+    # - These adjustments are modest by design to ensure base performance remains the primary factor
     
     return result_df
 

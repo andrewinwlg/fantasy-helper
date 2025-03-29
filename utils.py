@@ -34,61 +34,65 @@ def print_ordered_roster(players: List[str]) -> None:
     ORDER BY psr.Fantasy_Points_Per_Game_30D DESC
     """.format(','.join('?' * len(players)))
 
+    conn = None
     try:
-        with sqlite3.connect('nba_stats.db') as conn:
-            df = pd.read_sql_query(query, conn, params=players)
+        conn = sqlite3.connect('nba_stats.db')
+        df = pd.read_sql_query(query, conn, params=players)
+        
+        if len(df) != len(players):
+            print("Warning: Some players not found in database")
+
+        # Add marker for players whose order has changed
+        df['Player_Display'] = df.apply(
+            lambda row: f"{row['Player']} *" 
+            if original_order[row['Player']] != df.index.get_loc(row.name) 
+            else row['Player'],
+            axis=1
+        )
+
+        # Print ordered table
+        print("\nRoster ordered by 30-day average:")
+        print("(* indicates change in order from current_team.txt)")
+        table = tabulate(
+            df[[
+                'Player_Display', 
+                'avg_fpts_30d',
+                'Value_Per_Game_30D',
+                'avg_fpts_15d', 
+                'avg_fpts_7d',
+                'Games_Last_30D',
+                'Pos',
+                'Team'
+            ]], 
+            headers=[
+                'Player',
+                'FP/G (30d)',
+                'Value (30d)',
+                'FP/G (15d)',
+                'FP/G (7d)',
+                'Games (30d)',
+                'Pos',
+                'Team'
+            ],
+            floatfmt=".1f",
+            tablefmt="pipe",
+            showindex=False
+        )
+        print(table)
+        
+        # Print total of all 30D averages
+        total_avg_fpts_30d = df['avg_fpts_30d'].sum()
+        print(f"\nTotal of all 30D averages: {total_avg_fpts_30d:.1f}")
+        
+        # Return DataFrame without the display column
+        df = df.drop('Player_Display', axis=1)
+        return df
     except sqlite3.Error as e:
         print(f"Database error: {e}")
-        return
-
-    if len(df) != len(players):
-        print("Warning: Some players not found in database")
-
-    # Add marker for players whose order has changed
-    df['Player_Display'] = df.apply(
-        lambda row: f"{row['Player']} *" 
-        if original_order[row['Player']] != df.index.get_loc(row.name) 
-        else row['Player'],
-        axis=1
-    )
-
-    # Print ordered table
-    print("\nRoster ordered by 30-day average:")
-    print("(* indicates change in order from current_team.txt)")
-    table = tabulate(
-        df[[
-            'Player_Display', 
-            'avg_fpts_30d',
-            'Value_Per_Game_30D',
-            'avg_fpts_15d', 
-            'avg_fpts_7d',
-            'Games_Last_30D',
-            'Pos',
-            'Team'
-        ]], 
-        headers=[
-            'Player',
-            'FP/G (30d)',
-            'Value (30d)',
-            'FP/G (15d)',
-            'FP/G (7d)',
-            'Games (30d)',
-            'Pos',
-            'Team'
-        ],
-        floatfmt=".1f",
-        tablefmt="pipe",
-        showindex=False
-    )
-    print(table)
-    
-    # Print total of all 30D averages
-    total_avg_fpts_30d = df['avg_fpts_30d'].sum()
-    print(f"\nTotal of all 30D averages: {total_avg_fpts_30d:.1f}")
-    
-    # Return DataFrame without the display column
-    df = df.drop('Player_Display', axis=1)
-    return df
+        return None
+    finally:
+        if conn:
+            conn.close()
 
 
 def reorder_current_team() -> None:
@@ -126,42 +130,46 @@ def update_team(login_id: str) -> None:
     Args:
         login_id: The login ID to fetch the team roster for
     """
+    conn = None
     try:
         # Connect to database
-        with sqlite3.connect('nba_stats.db') as conn:
-            # Get latest team roster for this login_id
-            query = """
-            SELECT player_name 
-            FROM nba_team_players 
-            WHERE login_id = ?
-            ORDER BY id ASC
-            """
-            df = pd.read_sql_query(query, conn, params=[login_id])
+        conn = sqlite3.connect('nba_stats.db')
+        # Get latest team roster for this login_id
+        query = """
+        SELECT player_name 
+        FROM nba_team_players 
+        WHERE login_id = ?
+        ORDER BY id ASC
+        """
+        df = pd.read_sql_query(query, conn, params=[login_id])
+        
+        if df.empty:
+            print(f"No players found for login_id: {login_id}")
+            return
+        
+        if len(df) != 10:
+            print(f"Error: Expected 10 players, but found {len(df)} for login_id: {login_id}")
+            return
             
-            if df.empty:
-                print(f"No players found for login_id: {login_id}")
-                return
-            
-            if len(df) != 10:
-                print(f"Error: Expected 10 players, but found {len(df)} for login_id: {login_id}")
-                return
-                
-            # Write to current_team.txt
-            with open('current_team.txt', 'w') as f:
-                for player in df['player_name']:
-                    f.write(f"{player}\n")
-            
-            print(f"Updated current_team.txt with {len(df)} players")
-            
-            # Print the updated roster
-            print(f"\nCurrent roster for {login_id}:")
+        # Write to current_team.txt
+        with open('current_team.txt', 'w') as f:
             for player in df['player_name']:
-                print(f"  - {player}")
-                
+                f.write(f"{player}\n")
+        
+        print(f"Updated current_team.txt with {len(df)} players")
+        
+        # Print the updated roster
+        print(f"\nCurrent roster for {login_id}:")
+        for player in df['player_name']:
+            print(f"  - {player}")
+            
     except sqlite3.Error as e:
         print(f"Database error: {e}")
     except IOError as e:
         print(f"Error writing to file: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 
 def main() -> None:

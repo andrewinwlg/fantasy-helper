@@ -161,7 +161,7 @@ pre-commit run --all-files
 - [ ] The incremental update seems to do too much clean up that's already been done in the nba_scraper.py
 - [?] Present the data in a webpage
 - [X] Do some basic data science to evaluate who are valuable players
-- [ ] Load your own fantasy team into the database for analysis
+- [X] Load your own fantasy team into the database for analysis
 - [ ] Load your whole fantasy league into the database for analysis
 - [ ] Secure storage of fantasy league credentials
 - [ ] Build an AI agent that can translate English language requests into recommendations, e.g. "who should I consider trading with?" "what free agent shows the most promise?" etc
@@ -174,12 +174,12 @@ pre-commit run --all-files
 - [ ] Add more fantasy scoring systems
 - [ ] Add support for DraftKings scoring
 - [ ] Add support for FanDuel scoring
-- [ ] Add player injury status tracking
+- [X] Add player injury status tracking
 - [ ] Add team schedule tracking
 - [ ] Add player news/updates tracking
 - [ ] Add player consistency metrics
 - [ ] Add player correlation analysis
-- [ ] Add player stacking recommendations
+- [X] Add player stacking recommendations
 - [X] Add lineup optimization for NBA salary cap game
 - [ ] Add player ownership projections
 - [ ] Add bankroll management recommendations

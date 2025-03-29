@@ -57,28 +57,36 @@ def get_player_data() -> pd.DataFrame:
     AND nsc.salary > 0
     """
     
-    with sqlite3.connect('nba_stats.db') as conn:
+    conn = None
+    try:
+        conn = sqlite3.connect('nba_stats.db')
         df = pd.read_sql(query, conn)
-    
-    # Create front_court/back_court indicators
-    df['is_front_court'] = df['Pos'].str.contains('F|C')
-    df['is_back_court'] = df['Pos'].str.contains('G')
-    
-    # Exclude injured players with return dates more than 2 days away
-    today = pd.Timestamp.now().normalize()
-    injured_players = df[
-        df['expected_return'].notna() & 
-        (pd.to_datetime(df['expected_return']) > today + pd.Timedelta(days=2))
-    ]['Player'].tolist()
-    
-    if injured_players:
-        print("\nAutomatically excluding the following injured players:")
-        for player in injured_players:
-            injury_info = df[df['Player'] == player].iloc[0]
-            print(f"- {player}: {injury_info['injury_type']}, Expected return: {injury_info['expected_return']}")
-        df = df[~df['Player'].isin(injured_players)]
-    
-    return df
+        
+        # Create front_court/back_court indicators
+        df['is_front_court'] = df['Pos'].str.contains('F|C')
+        df['is_back_court'] = df['Pos'].str.contains('G')
+        
+        # Exclude injured players with return dates more than 2 days away
+        today = pd.Timestamp.now().normalize()
+        injured_players = df[
+            df['expected_return'].notna() & 
+            (pd.to_datetime(df['expected_return']) > today + pd.Timedelta(days=2))
+        ]['Player'].tolist()
+        
+        if injured_players:
+            print("\nAutomatically excluding the following injured players:")
+            for player in injured_players:
+                injury_info = df[df['Player'] == player].iloc[0]
+                print(f"- {player}: {injury_info['injury_type']}, Expected return: {injury_info['expected_return']}")
+            df = df[~df['Player'].isin(injured_players)]
+        
+        return df
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+        raise
+    finally:
+        if conn:
+            conn.close()
 
 def optimize_roster(
     df: pd.DataFrame, 
@@ -458,30 +466,38 @@ def load_current_team(file_path: str) -> pd.DataFrame:
     WHERE ps.Player IN ({', '.join(['"' + player + '"' for player in players])})
     """
     
-    with sqlite3.connect('nba_stats.db') as conn:
+    conn = None
+    try:
+        conn = sqlite3.connect('nba_stats.db')
         current_roster = pd.read_sql(query, conn)
-    
-    # Check if exactly 10 players were found
-    if len(current_roster) != 10:
-        raise ValueError(f"Expected 10 players, but found {len(current_roster)}. Please check the current_team.txt file.")
-    
-    # Create front_court/back_court indicators for current roster
-    current_roster['is_front_court'] = current_roster['Pos'].str.contains('F|C')
-    current_roster['is_back_court'] = current_roster['Pos'].str.contains('G')
-    
-    # Check for injured players
-    today = pd.Timestamp.now().normalize()
-    injured_players = current_roster[
-        current_roster['expected_return'].notna() & 
-        (pd.to_datetime(current_roster['expected_return']) > today + pd.Timedelta(days=2))
-    ]
-    
-    if not injured_players.empty:
-        print("\nWarning: The following players on your current roster are injured:")
-        for _, player in injured_players.iterrows():
-            print(f"- {player['Player']}: {player['injury_type']}, Expected return: {player['expected_return']}")
-    
-    return current_roster
+        
+        # Check if exactly 10 players were found
+        if len(current_roster) != 10:
+            raise ValueError(f"Expected 10 players, but found {len(current_roster)}. Please check the current_team.txt file.")
+        
+        # Create front_court/back_court indicators for current roster
+        current_roster['is_front_court'] = current_roster['Pos'].str.contains('F|C')
+        current_roster['is_back_court'] = current_roster['Pos'].str.contains('G')
+        
+        # Check for injured players
+        today = pd.Timestamp.now().normalize()
+        injured_players = current_roster[
+            current_roster['expected_return'].notna() & 
+            (pd.to_datetime(current_roster['expected_return']) > today + pd.Timedelta(days=2))
+        ]
+        
+        if not injured_players.empty:
+            print("\nWarning: The following players on your current roster are injured:")
+            for _, player in injured_players.iterrows():
+                print(f"- {player['Player']}: {player['injury_type']}, Expected return: {player['expected_return']}")
+        
+        return current_roster
+    except Exception as e:
+        print(f"Error loading current team: {e}")
+        raise
+    finally:
+        if conn:
+            conn.close()
 
 def print_optimization_results(current_roster: pd.DataFrame, available_players: pd.DataFrame, drop_vars: Dict, add_vars: Dict) -> tuple:
     """Print the results of the optimization and return the changes."""

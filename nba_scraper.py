@@ -134,22 +134,59 @@ def scrape_player_game_log(player_url):
         # Add 2-second delay before each request
         time.sleep(2)
         
-        game_log = pd.read_html(full_url)[7]  # Index 7 typically contains regular season game log
-        
-        # Clean the data
-        game_log = game_log[game_log['Date'] != 'Date']  # Remove header rows
-        game_log = game_log[game_log['Rk'].notna()]     # Remove separator rows
-        
-        # Clean column names
-        game_log.columns = game_log.columns.str.replace('%', 'Pct')
-        game_log.columns = game_log.columns.str.replace(' ', '_')
-        game_log.columns = game_log.columns.str.replace('/', '_')
-        
-        # Add metadata
-        game_log['player_url'] = player_url
-        game_log['timestamp'] = datetime.now()
-        
-        return game_log
+        try:
+            # Try to read the game log table directly from the gamelog URL
+            tables = pd.read_html(full_url)
+            
+            # For the 2024-25 season, there should be one table on the gamelog page
+            if len(tables) == 0:
+                print(f"Player page exists but doesn't have 2025 season data: {player_url}")
+                return None
+                
+            # Get the first table which should be the game log
+            game_log = tables[0]
+            
+            # Verify this is actually a game log by checking for key columns
+            required_columns = ['Rk', 'Date', 'Team', 'Opp']
+            if not all(col in game_log.columns for col in required_columns):
+                print(f"Table doesn't appear to be a game log (missing required columns): {player_url}")
+                return None
+            
+            # Clean the data
+            game_log = game_log[game_log['Date'] != 'Date']  # Remove header rows
+            game_log = game_log[game_log['Rk'].notna()]     # Remove separator rows
+            
+            # Remove rows with "Did Not Play" - adjust column if needed
+            did_not_play_mask = game_log['MP'].astype(str).str.contains('Did Not Play')
+            if did_not_play_mask.any():
+                game_log = game_log[~did_not_play_mask]
+            
+            # Clean column names
+            game_log.columns = game_log.columns.str.replace('%', 'Pct')
+            game_log.columns = game_log.columns.str.replace(' ', '_')
+            game_log.columns = game_log.columns.str.replace('/', '_')
+            
+            # Add metadata
+            game_log['player_url'] = player_url
+            game_log['timestamp'] = datetime.now()
+            
+            # For debugging
+            print(f"Successfully scraped game log for {player_url} with {len(game_log)} rows")
+            
+            return game_log
+            
+        except ValueError as e:
+            if "No tables found" in str(e):
+                print(f"Player page doesn't exist or has no tables: {player_url}")
+            else:
+                print(f"Error parsing tables for {player_url}: {str(e)}")
+            return None
+        except IndexError:
+            print(f"Player page exists but doesn't have the expected table structure: {player_url}")
+            return None
+        except Exception as e:
+            print(f"Unexpected error for {player_url}: {str(e)}")
+            return None
     
     except Exception as e:
         print(f"Error message: {str(e)}")

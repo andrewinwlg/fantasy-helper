@@ -11,21 +11,36 @@ def clean_player_game_logs(incremental: bool = False) -> None:
     Args:
         incremental: If True, only insert new rows. If False, replace entire table.
     """
-    conn = sqlite3.connect('nba_stats.db')
+    print(f"Starting clean_player_game_logs with incremental={incremental}...")
+    
+    # Set a timeout to prevent locking issues
+    conn = sqlite3.connect('nba_stats.db', timeout=60.0)
     
     try:
         # Load raw game logs - use player_game_logs directly
+        print("Loading raw game logs from database...")
         df = pd.read_sql('SELECT * FROM player_game_logs', conn)
         
+        print(f"Loaded {len(df)} raw game logs")
+        
         # Clean the data
+        print("Cleaning game logs...")
         df = clean_game_logs(df)
         
         # Update clean_game_logs table
+        print("Updating clean_game_logs table...")
         update_clean_game_logs(df, conn, incremental)
         
         # Create/update views
+        print("Creating/updating analysis views...")
         create_analysis_views(conn)
         
+        print("Finished clean_player_game_logs successfully")
+        
+    except Exception as e:
+        print(f"Error in clean_player_game_logs: {str(e)}")
+        import traceback
+        print(f"Full stack trace:\n{traceback.format_exc()}")
     finally:
         conn.close()
 
@@ -85,24 +100,39 @@ def update_clean_game_logs(df: pd.DataFrame, conn: sqlite3.Connection, increment
     # Create table if it doesn't exist
     df.head(0).to_sql('clean_game_logs', conn, if_exists='append', index=False)
     
-    # Get existing game/player combinations
-    cursor.execute("""
-        SELECT Player, Game_Date 
-        FROM clean_game_logs
-    """)
-    existing = {(player, date) for player, date in cursor.fetchall()}
+    # More efficient way to get new rows using SQL
+    print(f"Total rows in dataframe: {len(df)}")
     
-    # Filter to only new rows
-    df['key'] = list(zip(df['Player'], df['Game_Date']))
-    new_rows = df[~df['key'].isin(existing)]
-    new_rows = new_rows.drop('key', axis=1)
+    # Convert dates to strings for consistency
+    if 'Date' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Date']):
+        df['Date'] = df['Date'].dt.strftime('%Y-%m-%d')
     
-    # Insert new rows
-    if len(new_rows) > 0:
-        new_rows.to_sql('clean_game_logs', conn, if_exists='append', index=False)
-        print(f"Added {len(new_rows)} new rows to clean_game_logs")
-    else:
-        print("No new rows to add to clean_game_logs")
+    # Use a temporary table approach for better performance
+    print("Creating temporary table...")
+    temp_table = 'temp_new_game_logs'
+    df.to_sql(temp_table, conn, if_exists='replace', index=False)
+    
+    # Use SQL to insert only the new rows
+    print("Finding and inserting new rows...")
+    insert_query = f"""
+    INSERT INTO clean_game_logs
+    SELECT t.*
+    FROM {temp_table} t
+    LEFT JOIN clean_game_logs c ON 
+        c.player_url = t.player_url AND 
+        c.Date = t.Date
+    WHERE c.player_url IS NULL
+    """
+    cursor.execute(insert_query)
+    inserted_count = cursor.rowcount
+    
+    # Drop the temporary table
+    cursor.execute(f"DROP TABLE {temp_table}")
+    
+    # Commit changes
+    conn.commit()
+    
+    print(f"Added {inserted_count} new rows to clean_game_logs")
 
 def create_analysis_views(conn: sqlite3.Connection) -> None:
     """Create useful views for analysis."""

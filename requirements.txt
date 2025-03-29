@@ -1,13 +1,13 @@
 # Web scraping
-requests>=2.0.0,<3.0.0
-beautifulsoup4>=4.9.0,<5.0.0
-selenium>=4.0.0,<5.0.0
+requests>=2.25.1
+beautifulsoup4>=4.9.3
+selenium>=4.0.0
 lxml>=4.9.0,<5.0.0
 
 # Data processing
-pandas>=1.3.0,<2.0.0
-numpy>=1.20.0,<2.0.0
-unidecode>=1.3.0,<2.0.0
+pandas>=1.3.0
+numpy>=1.20.0
+unidecode>=1.2.0
 
 # Machine Learning
 scikit-learn>=1.0.0,<2.0.0
@@ -22,13 +22,13 @@ pre-commit>=2.20.0,<3.0.0
 # Optional but recommended
 ipython>=8.0.0,<9.0.0  # for interactive development
 jupyter>=1.0.0,<2.0.0  # for data exploration
-matplotlib>=3.5.0,<4.0.0  # for visualizations
+matplotlib>=3.4.0,<4.0.0  # for visualizations
 seaborn>=0.11.0,<1.0.0  # for statistical visualizations
 
 pulp>=2.7.0,<3.0.0  # for optimization
 
 # Visualization
-matplotlib>=3.5.0,<4.0.0
+matplotlib>=3.4.0,<4.0.0
 seaborn>=0.11.0,<1.0.0
 
 # Optimization
@@ -36,3 +36,7 @@ pulp>=2.7.0,<3.0.0
 
 # Formatting
 tabulate>=0.9.0,<1.0.0  # for table formatting
+
+# Added from the code block
+webdriver-manager>=3.5.2
+scipy>=1.7.0

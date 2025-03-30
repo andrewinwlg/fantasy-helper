@@ -4,7 +4,7 @@ import sys
 import pandas as pd
 
 
-def clean_player_game_logs(incremental: bool = False) -> None:
+def clean_player_game_logs(incremental=False):
     """
     Clean player game logs and save to database.
     
@@ -13,15 +13,32 @@ def clean_player_game_logs(incremental: bool = False) -> None:
     """
     print(f"Starting clean_player_game_logs with incremental={incremental}...")
     
-    # Set a timeout to prevent locking issues
-    conn = sqlite3.connect('nba_stats.db', timeout=60.0)
+    # Connect with a longer timeout to prevent database locks
+    conn = sqlite3.connect('nba_stats.db', timeout=120.0)
     
     try:
-        # Load raw game logs - use player_game_logs directly
-        print("Loading raw game logs from database...")
-        df = pd.read_sql('SELECT * FROM player_game_logs', conn)
-        
-        print(f"Loaded {len(df)} raw game logs")
+        # Get all raw game logs
+        if incremental:
+            # Only fetch game logs without a corresponding entry in clean_game_logs
+            print("Fetching only new game logs for incremental processing...")
+            query = """
+            SELECT gl.* FROM player_game_logs gl
+            LEFT JOIN (
+                SELECT DISTINCT Date, player_url FROM clean_game_logs
+            ) cl ON gl.Date = cl.Date AND gl.player_url = cl.player_url
+            WHERE cl.Date IS NULL
+            """
+            df = pd.read_sql_query(query, conn)
+        else:
+            # Fetch all game logs
+            print("Loading all raw game logs from database...")
+            df = pd.read_sql('SELECT * FROM player_game_logs', conn)
+            
+        if df.empty:
+            print("No new game logs to process")
+            return
+            
+        print(f"Processing {len(df)} game logs")
         
         # Clean the data
         print("Cleaning game logs...")
@@ -42,15 +59,14 @@ def clean_player_game_logs(incremental: bool = False) -> None:
         import traceback
         print(f"Full stack trace:\n{traceback.format_exc()}")
     finally:
-        conn.close()
+        # Ensure connections are closed properly
+        if 'conn' in locals() and conn:
+            conn.close()
+            print("Database connection closed in clean_player_game_logs")
 
-def clean_game_logs(df: pd.DataFrame) -> pd.DataFrame:
+def clean_game_logs(df):
     """
-    Clean and transform the player_game_logs table data:
-    - Convert numeric columns from TEXT to proper numeric types
-    - Clean up the home/away indicator
-    - Format dates consistently
-    - Split game result into result and margin columns
+    Clean and transform the player_game_logs table data
     """
     # Convert numeric columns to proper types
     numeric_columns = ['PTS', 'TRB', 'AST', 'STL', 'BLK', 'TOV', 'PF', 
@@ -97,6 +113,11 @@ def update_clean_game_logs(df: pd.DataFrame, conn: sqlite3.Connection, increment
     # Incremental update - only insert new rows
     cursor = conn.cursor()
     
+    # Get the current schema of clean_game_logs
+    cursor.execute("PRAGMA table_info(clean_game_logs)")
+    table_columns = [row[1] for row in cursor.fetchall()]
+    print(f"Table clean_game_logs has {len(table_columns)} columns: {', '.join(table_columns)}")
+    
     # Create table if it doesn't exist
     df.head(0).to_sql('clean_game_logs', conn, if_exists='append', index=False)
     
@@ -112,11 +133,25 @@ def update_clean_game_logs(df: pd.DataFrame, conn: sqlite3.Connection, increment
     temp_table = 'temp_new_game_logs'
     df.to_sql(temp_table, conn, if_exists='replace', index=False)
     
+    # Find common columns between df and clean_game_logs
+    df_columns = list(df.columns)
+    common_columns = [col for col in df_columns if col in table_columns]
+    print(f"Found {len(common_columns)} common columns between dataframe and table")
+    
+    # For any columns in table but not in df, we'll use NULL
+    missing_columns = [col for col in table_columns if col not in df_columns]
+    if missing_columns:
+        print(f"Columns in table but not in dataframe: {', '.join(missing_columns)}")
+    
+    # Build the insert query with explicit column names
+    columns_clause = ', '.join(table_columns)
+    values_clause = ', '.join([f"t.{col}" if col in common_columns else "NULL" for col in table_columns])
+    
     # Use SQL to insert only the new rows
     print("Finding and inserting new rows...")
     insert_query = f"""
-    INSERT INTO clean_game_logs
-    SELECT t.*
+    INSERT INTO clean_game_logs ({columns_clause})
+    SELECT {values_clause}
     FROM {temp_table} t
     LEFT JOIN clean_game_logs c ON 
         c.player_url = t.player_url AND 

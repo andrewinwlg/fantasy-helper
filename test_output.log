@@ -1,0 +1,15 @@
+Testing get_latest_games with URL: /players/p/poolejo01.html
+Checking for new games for Jordan Poole...
+Database columns: Rk, G, Date, Age, Tm... (showing first 5)
+Fetching game log from: https://www.basketball-reference.com/players/p/poolejo01/gamelog/2025
+Database connection closed
+Traceback (most recent call last):
+  File "test_incremental.py", line 46, in <module>
+    main() 
+  File "test_incremental.py", line 21, in main
+    new_games, inactive_players = get_latest_games(conn, player_urls)
+  File "/mnt/c/BUILD/git_build/fantasy-helper/incremental_update.py", line 71, in get_latest_games
+    current_games = scrape_player_game_log(url)
+  File "/mnt/c/BUILD/git_build/fantasy-helper/nba_scraper.py", line 141, in scrape_player_game_log
+    time.sleep(2)
+KeyboardInterrupt

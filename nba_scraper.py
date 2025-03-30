@@ -2,6 +2,10 @@ import argparse
 import sqlite3
 import time
 import traceback
+import os
+import requests
+from bs4 import BeautifulSoup
+import io
 from datetime import datetime
 
 import pandas as pd
@@ -131,35 +135,136 @@ def scrape_player_game_log(player_url):
         game_log_url = player_url.replace('.html', '/gamelog/2025')
         full_url = base_url + game_log_url
         
+        print(f"Fetching game log from: {full_url}")
+        
         # Add 2-second delay before each request
         time.sleep(2)
         
         try:
-            # Try to read the game log table directly from the gamelog URL
-            tables = pd.read_html(full_url)
+            # First, try to save the HTML content for debugging
+            if not os.path.exists("debug"):
+                os.makedirs("debug")
+                
+            # Get the player ID from the URL
+            player_id = player_url.split('/')[-1].replace('.html', '')
             
-            # For the 2024-25 season, there should be one table on the gamelog page
-            if len(tables) == 0:
-                print(f"Player page exists but doesn't have 2025 season data: {player_url}")
+            # Fetch the page content
+            response = requests.get(full_url)
+            if response.status_code != 200:
+                print(f"Failed to fetch page: {response.status_code}")
                 return None
                 
-            # Get the first table which should be the game log
-            game_log = tables[0]
+            html_content = response.text
+            
+            # Save the HTML for debugging
+            debug_file = os.path.join("debug", f"{player_id}_gamelog.html")
+            with open(debug_file, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            
+            # Parse with BeautifulSoup first to locate the table
+            soup = BeautifulSoup(html_content, 'html.parser')
+            
+            # Look for the game log table - it's usually the one with id containing 'pgl_basic'
+            game_log_table = None
+            for table in soup.find_all('table'):
+                if table.get('id') and 'pgl_basic' in table.get('id'):
+                    game_log_table = table
+                    break
+            
+            # If we found the table directly, use pandas to parse just that table
+            if game_log_table:
+                print(f"Found game log table with id: {game_log_table.get('id')}")
+                # Use pandas to read just this table
+                game_log_html = str(game_log_table)
+                game_log = pd.read_html(io.StringIO(game_log_html))[0]
+            else:
+                # Fallback: Try reading all tables and find the one that looks like a game log
+                print("Game log table not found by ID, trying to read all tables...")
+                tables = pd.read_html(full_url)
+                
+                # Look for a table that has the expected columns for a game log
+                for i, table in enumerate(tables):
+                    if 'Rk' in table.columns and 'Date' in table.columns:
+                        print(f"Found game log in table {i}")
+                        game_log = table
+                        break
+                else:
+                    # If we didn't find a table with the right columns, try another approach
+                    # Look for rows with game stats in the HTML
+                    print("No suitable table found, trying to extract from HTML...")
+                    
+                    # Extract data manually from the HTML
+                    rows = []
+                    for tr in soup.find_all('tr'):
+                        if 'data-stat' in str(tr):
+                            row_data = {}
+                            
+                            # Check if this row has date and other key columns
+                            date_td = tr.find('td', {'data-stat': 'date'})
+                            if date_td and date_td.find('a'):
+                                row_data['Date'] = date_td.text.strip()
+                                
+                                # Get other important columns
+                                for td in tr.find_all('td'):
+                                    stat_name = td.get('data-stat')
+                                    if stat_name:
+                                        row_data[stat_name] = td.text.strip()
+                                
+                                # If we have enough data, add this row
+                                if len(row_data) > 5:  # Arbitrary threshold
+                                    rows.append(row_data)
+                    
+                    if rows:
+                        game_log = pd.DataFrame(rows)
+                        print(f"Manually extracted {len(rows)} game log rows")
+                    else:
+                        print(f"Could not find game log data in HTML: {player_url}")
+                        return None
             
             # Verify this is actually a game log by checking for key columns
-            required_columns = ['Rk', 'Date', 'Team', 'Opp']
-            if not all(col in game_log.columns for col in required_columns):
-                print(f"Table doesn't appear to be a game log (missing required columns): {player_url}")
-                return None
+            required_columns = ['Rk', 'Date', 'Tm', 'Opp']  # Changed 'Team' to 'Tm' which is more common in BR
+            missing_columns = [col for col in required_columns if col not in game_log.columns]
+            
+            if missing_columns:
+                print(f"Table is missing required columns: {missing_columns}")
+                print(f"Available columns: {game_log.columns.tolist()}")
+                
+                # Try to map columns if possible
+                column_mappings = {
+                    'team_name_abbr': 'Tm',
+                    'opp_name_abbr': 'Opp',
+                    'ranker': 'Rk',
+                    'team_game_num_season': 'Gtm',
+                    'Team': 'Tm'  # Add this mapping for the specific case we're seeing
+                }
+                
+                for old_col, new_col in column_mappings.items():
+                    if old_col in game_log.columns and new_col not in game_log.columns:
+                        game_log = game_log.rename(columns={old_col: new_col})
+                        print(f"Mapped column {old_col} to {new_col}")
+                
+                # Check again after mapping
+                missing_columns = [col for col in required_columns if col not in game_log.columns]
+                if missing_columns:
+                    print(f"Still missing required columns after mapping: {missing_columns}")
+                    return None
             
             # Clean the data
             game_log = game_log[game_log['Date'] != 'Date']  # Remove header rows
             game_log = game_log[game_log['Rk'].notna()]     # Remove separator rows
             
             # Remove rows with "Did Not Play" - adjust column if needed
-            did_not_play_mask = game_log['MP'].astype(str).str.contains('Did Not Play')
-            if did_not_play_mask.any():
-                game_log = game_log[~did_not_play_mask]
+            did_not_play_column = 'MP' if 'MP' in game_log.columns else 'mp'
+            if did_not_play_column in game_log.columns:
+                did_not_play_mask = game_log[did_not_play_column].astype(str).str.contains('Did Not Play', na=False)
+                if did_not_play_mask.any():
+                    game_log = game_log[~did_not_play_mask]
+            
+            # Ensure 'Gtm' column exists (team game number)
+            if 'Gtm' not in game_log.columns and 'team_game_num_season' in game_log.columns:
+                game_log['Gtm'] = game_log['team_game_num_season']
+            elif 'G' in game_log.columns and 'Gtm' not in game_log.columns:
+                game_log['Gtm'] = game_log['G']
             
             # Clean column names
             game_log.columns = game_log.columns.str.replace('%', 'Pct')
@@ -172,6 +277,7 @@ def scrape_player_game_log(player_url):
             
             # For debugging
             print(f"Successfully scraped game log for {player_url} with {len(game_log)} rows")
+            print(f"Final columns: {', '.join(game_log.columns[:10])}... (showing first 10)")
             
             return game_log
             
@@ -181,11 +287,13 @@ def scrape_player_game_log(player_url):
             else:
                 print(f"Error parsing tables for {player_url}: {str(e)}")
             return None
-        except IndexError:
+        except IndexError as e:
             print(f"Player page exists but doesn't have the expected table structure: {player_url}")
+            print(f"Error: {str(e)}")
             return None
         except Exception as e:
             print(f"Unexpected error for {player_url}: {str(e)}")
+            print(f"Full stack trace:\n{traceback.format_exc()}")
             return None
     
     except Exception as e:

@@ -1,63 +1,46 @@
+"""
+Test script to run incremental update on a single player
+"""
 import sqlite3
-import pandas as pd
-from incremental_update import get_latest_games
+import time
+from incremental_update import get_latest_games, process_new_games
 
-def test_get_latest_games():
-    """
-    Test the get_latest_games function with a limited set of player URLs.
-    """
-    # Connect to the database
-    conn = sqlite3.connect('nba_stats.db')
-    
-    # Use a small set of player URLs
-    player_urls = [
-        '/players/a/anthoco01.html',  # Cole Anthony
-        '/players/b/beaslma01.html'    # Malik Beasley
-    ]
-    
-    print("Testing get_latest_games with a small set of players...")
-    
-    # Call the function
+def main():
+    # Connect to the database with a longer timeout
+    conn = None
     try:
-        new_games_count, inactive_players = get_latest_games(conn, player_urls)
+        # Set a 120-second timeout for database operations
+        conn = sqlite3.connect('nba_stats.db', timeout=120.0)
         
-        print(f"\nTest results:")
-        print(f"New games added: {new_games_count}")
-        print(f"Inactive players: {len(inactive_players)}")
+        # Test with Jordan Poole's URL
+        player_urls = ["/players/p/poolejo01.html"]
         
-        if inactive_players:
-            print("Inactive players:")
-            for name, url in inactive_players:
-                print(f"  - {name} ({url})")
+        print(f"Testing get_latest_games with URL: {player_urls[0]}")
         
-        # Verify that the data was inserted correctly
-        if new_games_count > 0:
-            for url in player_urls:
-                # Get player name
-                player_name = pd.read_sql_query(
-                    "SELECT DISTINCT Player FROM player_stats WHERE player_url = ?",
-                    conn, params=[url]
-                ).iloc[0]['Player'] if not pd.read_sql_query(
-                    "SELECT DISTINCT Player FROM player_stats WHERE player_url = ?",
-                    conn, params=[url]
-                ).empty else "Unknown"
-                
-                # Get game count
-                game_count = pd.read_sql_query(
-                    "SELECT COUNT(*) as count FROM player_game_logs WHERE player_url = ?",
-                    conn, params=[url]
-                ).iloc[0]['count']
-                
-                print(f"{player_name}: {game_count} games in database")
+        # Get and store new games
+        new_games, inactive_players = get_latest_games(conn, player_urls)
+        print(f"Added {new_games} new games to the database")
         
-        print("\nTest completed successfully!")
-        
-    except Exception as e:
-        print(f"Error during test: {str(e)}")
-        import traceback
-        print(f"Full stack trace:\n{traceback.format_exc()}")
+        # Process new games only if we found any
+        if new_games > 0:
+            # Close connection before processing to avoid locks
+            if conn:
+                conn.close()
+                conn = None
+                time.sleep(2)  # Give time for the connection to fully close
+            
+            # Create a new connection for processing
+            conn = sqlite3.connect('nba_stats.db', timeout=120.0)
+            processed_games = process_new_games(conn)
+            print(f"Processed {processed_games} new games")
+        else:
+            print("No new games found, skipping processing step")
+    
     finally:
-        conn.close()
+        # Ensure the connection is closed
+        if conn:
+            conn.close()
+            print("Database connection closed")
 
 if __name__ == "__main__":
-    test_get_latest_games() 
+    main() 

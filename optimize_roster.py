@@ -12,6 +12,7 @@ import pandas as pd
 import pulp
 import seaborn as sns
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum
+import numpy as np
 
 from utils import reorder_current_team
 
@@ -622,7 +623,8 @@ def calculate_composite_score(df: pd.DataFrame, weights: dict = None) -> pd.Data
     Args:
         df: DataFrame containing player stats
         weights: Dictionary of weights for different metrics. If None, default weights are used.
-            Possible keys: 'avg_30d', 'avg_15d', 'avg_7d', 'consistency', 'recent_trend'
+            Possible keys: 'avg_30d', 'avg_15d', 'avg_7d', 'consistency', 'recent_trend',
+                          'min_games_7d', 'min_games_15d'
     
     Returns:
         DataFrame with added composite_score column
@@ -637,8 +639,20 @@ def calculate_composite_score(df: pd.DataFrame, weights: dict = None) -> pd.Data
             'avg_15d': 0.3,    # 15-day average (medium-term)
             'avg_7d': 0.3,     # 7-day average (recent performance)
             'consistency': 0.5, # How much to penalize inconsistency
-            'recent_trend': 0.5 # How much to reward/penalize recent trend
+            'recent_trend': 0.5, # How much to reward/penalize recent trend
+            'min_games_7d': 2,  # Minimum games in last 7 days
+            'min_games_15d': 4   # Minimum games in last 15 days
         }
+    
+    # If min_games parameters aren't in weights, add defaults
+    if 'min_games_7d' not in weights:
+        weights['min_games_7d'] = 2
+    if 'min_games_15d' not in weights:
+        weights['min_games_15d'] = 4
+        
+    # Print the minimum games requirements
+    print(f"Minimum games for 7-day stats: {weights['min_games_7d']}")
+    print(f"Minimum games for 15-day stats: {weights['min_games_15d']}")
     
     # Convert expected_return to datetime
     result_df['expected_return_dt'] = pd.to_datetime(result_df['expected_return'], errors='coerce')
@@ -667,15 +681,63 @@ def calculate_composite_score(df: pd.DataFrame, weights: dict = None) -> pd.Data
     # Compare 7-day average to 30-day average to identify improving/declining players
     # Positive value = player is improving, Negative value = player is declining
     if 'Fantasy_Points_Per_Game_7D' in result_df.columns and 'avg_fpts' in result_df.columns:
-        result_df['recent_trend'] = result_df['Fantasy_Points_Per_Game_7D'] / result_df['avg_fpts'] - 1
+        # Apply the minimum games filter for 7-day stats
+        has_enough_7d_games = result_df['Games_Last_7D'] >= weights['min_games_7d']
+        
+        # For players with enough recent games, calculate trend
+        # For others, set trend to 0 (neutral)
+        result_df['recent_trend'] = 0.0
+        mask = has_enough_7d_games & (result_df['avg_fpts'] > 0)
+        
+        if mask.any():
+            result_df.loc[mask, 'recent_trend'] = (
+                result_df.loc[mask, 'Fantasy_Points_Per_Game_7D'] / 
+                result_df.loc[mask, 'avg_fpts'] - 1
+            )
+        
         # Normalize trend between -1 and 1:
         # - 1 = strongest positive trend (e.g., player who recently became starter)
         # - 0 = no trend (recent performance matches longer-term average)
         # - -1 = strongest negative trend (e.g., player with reduced minutes/role)
         max_trend = max(result_df['recent_trend'].abs().max(), 0.5)  # At least 0.5 to avoid extreme normalization
         result_df['recent_trend_norm'] = result_df['recent_trend'] / max_trend
+        
+        # Replace any NaNs with 0 (neutral trend)
+        result_df['recent_trend_norm'] = result_df['recent_trend_norm'].fillna(0)
     else:
         result_df['recent_trend_norm'] = 0  # Default if trend can't be calculated
+    
+    # Handle 15-day stats
+    if 'Fantasy_Points_Per_Game_15D' in result_df.columns:
+        # Apply the minimum games filter for 15-day stats
+        has_enough_15d_games = result_df['Games_Last_15D'] >= weights['min_games_15d']
+        
+        # For players without enough 15-day games, use 30-day average
+        result_df['Fantasy_Points_Per_Game_15D_adjusted'] = result_df['avg_fpts']
+        
+        # For players with enough games, use their actual 15-day average
+        mask = has_enough_15d_games
+        if mask.any():
+            result_df.loc[mask, 'Fantasy_Points_Per_Game_15D_adjusted'] = result_df.loc[mask, 'Fantasy_Points_Per_Game_15D']
+    else:
+        # If 15-day stats don't exist, use 30-day
+        result_df['Fantasy_Points_Per_Game_15D_adjusted'] = result_df['avg_fpts']
+    
+    # Handle 7-day stats similarly
+    if 'Fantasy_Points_Per_Game_7D' in result_df.columns:
+        # Apply the minimum games filter for 7-day stats
+        has_enough_7d_games = result_df['Games_Last_7D'] >= weights['min_games_7d']
+        
+        # For players without enough 7-day games, use 30-day average
+        result_df['Fantasy_Points_Per_Game_7D_adjusted'] = result_df['avg_fpts']
+        
+        # For players with enough games, use their actual 7-day average
+        mask = has_enough_7d_games
+        if mask.any():
+            result_df.loc[mask, 'Fantasy_Points_Per_Game_7D_adjusted'] = result_df.loc[mask, 'Fantasy_Points_Per_Game_7D']
+    else:
+        # If 7-day stats don't exist, use 30-day
+        result_df['Fantasy_Points_Per_Game_7D_adjusted'] = result_df['avg_fpts']
     
     # Calculate the composite score
     # The composite score consists of:
@@ -686,11 +748,17 @@ def calculate_composite_score(df: pd.DataFrame, weights: dict = None) -> pd.Data
     #    or subtract up to 10% for strongly declining players (trend_norm ranges from -1 to 1)
     result_df['composite_score'] = (
         weights['avg_30d'] * result_df['avg_fpts'] +
-        weights.get('avg_15d', 0) * result_df.get('Fantasy_Points_Per_Game_15D', result_df['avg_fpts']) +
-        weights.get('avg_7d', 0) * result_df.get('Fantasy_Points_Per_Game_7D', result_df['avg_fpts']) +
+        weights.get('avg_15d', 0) * result_df['Fantasy_Points_Per_Game_15D_adjusted'] +
+        weights.get('avg_7d', 0) * result_df['Fantasy_Points_Per_Game_7D_adjusted'] +
         weights['consistency'] * result_df['consistency_score'] * result_df['avg_fpts'] * 0.2 +  # Scale consistency impact
         weights['recent_trend'] * result_df['recent_trend_norm'] * result_df['avg_fpts'] * 0.2    # Scale trend impact
     )
+    
+    # Check for and handle any NaN or infinite values
+    mask = result_df['composite_score'].isna() | np.isinf(result_df['composite_score'])
+    if mask.any():
+        print(f"Warning: Found {mask.sum()} players with NaN or infinite composite scores. Using 30-day average instead.")
+        result_df.loc[mask, 'composite_score'] = result_df.loc[mask, 'avg_fpts']
     
     # Note on consistency and trend impact:
     # - With default weights (0.5), consistency contributes: 0.5 * consistency_score * avg_fpts * 0.2

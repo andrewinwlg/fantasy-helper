@@ -81,9 +81,20 @@ def get_latest_games(conn, player_urls, max_retries=3, timeout=10):
                     # We specifically want 'Gtm' from the scraped data - team game number for current season
                     scraped_game_col = 'Gtm'
                     if scraped_game_col not in current_games.columns:
-                        error_msg = f"ERROR: Could not find '{scraped_game_col}' column in scraped data for {player_name}"
-                        print(error_msg)
-                        raise ValueError(error_msg)
+                        # Try to find similar column
+                        possible_alternatives = ['G', 'team_game_num_season']
+                        found_alternative = False
+                        for alt_col in possible_alternatives:
+                            if alt_col in current_games.columns:
+                                print(f"Using {alt_col} as alternative to {scraped_game_col}")
+                                current_games = current_games.rename(columns={alt_col: scraped_game_col})
+                                found_alternative = True
+                                break
+                        
+                        if not found_alternative:
+                            error_msg = f"ERROR: Could not find '{scraped_game_col}' column in scraped data for {player_name}"
+                            print(error_msg)
+                            raise ValueError(error_msg)
                     
                     # Clean up the current games data
                     current_games = current_games[current_games[scraped_game_col].notna()]   # Remove any rows without game number
@@ -200,9 +211,8 @@ def process_new_games(conn):
     """
     Processes newly added games through post_scraper and calc_fpts logic
     """
-    # Create a new connection for other modules to use
-    # This prevents conflicts with the existing connection passed from the main function
-    db_path = 'nba_stats.db'
+    # Store connection parameters
+    conn_path = 'nba_stats.db'
     
     try:
         # Get count before processing
@@ -215,6 +225,9 @@ def process_new_games(conn):
         before_count = 0
     
     try:
+        # Close the existing connection to avoid locks
+        conn.close()
+        
         print("Starting clean_player_game_logs with incremental=True...")
         # First, clean all game logs (including new ones)
         # Pass incremental=True to only process new games
@@ -226,11 +239,16 @@ def process_new_games(conn):
         calculate_fantasy_points()
         print("Finished calculate_fantasy_points")
         
+        # Reconnect to get the after count
+        new_conn = sqlite3.connect(conn_path, timeout=60.0)
+        
         # Get count after processing
         after_count = pd.read_sql_query(
             "SELECT COUNT(*) as count FROM clean_game_logs", 
-            conn
+            new_conn
         ).iloc[0]['count']
+        
+        new_conn.close()
         
         return after_count - before_count
     except Exception as e:

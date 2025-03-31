@@ -207,9 +207,13 @@ def get_latest_games(conn, player_urls, max_retries=3, timeout=10):
     
     return new_games_count, inactive_players
 
-def process_new_games(conn):
+def process_new_games(conn, batch_size=1000):
     """
     Processes newly added games through post_scraper and calc_fpts logic
+    
+    Args:
+        conn: Database connection
+        batch_size: Batch size for fantasy point calculations
     """
     # Store connection parameters
     conn_path = 'nba_stats.db'
@@ -234,9 +238,9 @@ def process_new_games(conn):
         clean_player_game_logs(incremental=True)
         print("Finished clean_player_game_logs")
         
-        print("Starting calculate_fantasy_points...")
-        # Then calculate fantasy points for all games
-        calculate_fantasy_points()
+        print(f"Starting calculate_fantasy_points with batch_size={batch_size}...")
+        # Then calculate fantasy points for all games with specified batch size
+        calculate_fantasy_points(batch_size=batch_size)
         print("Finished calculate_fantasy_points")
         
         # Reconnect to get the after count
@@ -606,6 +610,8 @@ def main():
                         help='Check all players, not just those from teams with recent games')
     parser.add_argument('--force', action='store_true',
                         help='Force update even if no games are scheduled for today')
+    parser.add_argument('--batch-size', type=int, default=500,
+                        help='Batch size for processing fantasy points (default: 500)')
     args = parser.parse_args()
     
     start_time = datetime.now()
@@ -647,7 +653,8 @@ def main():
 
         # Process new games only if we found any
         if new_games > 0:
-            processed_games = process_new_games(conn)
+            print(f"Processing new games with batch size of {args.batch_size}...")
+            processed_games = process_new_games(conn, batch_size=args.batch_size)
             print(f"Processed {processed_games} new games at {datetime.now()}")
         else:
             print("No new games found, skipping processing step")

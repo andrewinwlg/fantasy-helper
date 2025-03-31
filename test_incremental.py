@@ -4,6 +4,7 @@ Test script to run incremental update on a single player
 import sqlite3
 import time
 from incremental_update import get_latest_games, process_new_games
+from calc_fpts import calculate_fantasy_points
 
 def main():
     # Connect to the database with a longer timeout
@@ -29,10 +30,14 @@ def main():
                 conn = None
                 time.sleep(2)  # Give time for the connection to fully close
             
-            # Create a new connection for processing
+            # Run fantasy point calculations directly with a small batch size
+            # This avoids the process_new_games intermediary
+            print("Running calculate_fantasy_points with small batch size...")
+            calculate_fantasy_points(batch_size=100)  # Process in batches of 100 rows
+            
+            # Create a new connection for additional processing if needed
             conn = sqlite3.connect('nba_stats.db', timeout=120.0)
-            processed_games = process_new_games(conn)
-            print(f"Processed {processed_games} new games")
+            print("Fantasy point calculations complete!")
         else:
             print("No new games found, skipping processing step")
     

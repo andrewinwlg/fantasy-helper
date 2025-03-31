@@ -17,12 +17,15 @@ def ensure_fantasy_columns_exist(conn):
         conn.commit()
         print("Added fantasy points columns")
 
-def calculate_fantasy_points():
+def calculate_fantasy_points(batch_size=1000):
     """
     Add fantasy points calculations to clean_game_logs table:
     - ESPN fantasy points
     - NBA Salary Cap game points
     Only processes rows that don't already have fantasy points calculated
+    
+    Args:
+        batch_size: Number of rows to process in each batch
     """
     print("Starting calculate_fantasy_points...")
     
@@ -49,7 +52,8 @@ def calculate_fantasy_points():
             conn.close()
             return
         
-        print(f"Calculating fantasy points for {len(df)} new games...")
+        total_rows = len(df)
+        print(f"Calculating fantasy points for {total_rows} new games...")
         
         # Calculate ESPN fantasy points
         print("Calculating ESPN fantasy points...")
@@ -86,25 +90,58 @@ def calculate_fantasy_points():
         print(f"ESPN Points: {df.loc[sample_idx, 'espn_fpts']:.2f}")
         print(f"NBA Cap Points: {df.loc[sample_idx, 'nba_salary_cap_fpts']:.2f}")
         
-        # PERFORMANCE OPTIMIZATION: Use executemany instead of row-by-row updates
-        print(f"Updating {len(df)} rows in batch mode...")
+        # Process in batches
+        total_batches = (total_rows + batch_size - 1) // batch_size  # Ceiling division
+        updated_count = 0
         
-        # Prepare data for batch update
-        update_data = [
-            (float(row['espn_fpts']), float(row['nba_salary_cap_fpts']), row['player_url'], row['G']) 
-            for _, row in df.iterrows()
-        ]
+        import signal
+        import sys
         
-        # Execute batch update
+        # Define a timeout handler
+        def timeout_handler(signum, frame):
+            print("\n\nTimeout reached! Stopping processing.")
+            print(f"Processed {updated_count} out of {total_rows} rows.")
+            conn.commit()
+            sys.exit(0)
+        
+        # Set timeout handler for SIGINT (Ctrl+C)
+        signal.signal(signal.SIGINT, timeout_handler)
+        
+        print(f"Processing {total_rows} rows in {total_batches} batches (batch size: {batch_size})...")
+        
+        cursor = conn.cursor()
         update_query = """
         UPDATE clean_game_logs 
         SET espn_fpts = ?, nba_salary_cap_fpts = ?
         WHERE player_url = ? AND G = ?
         """
-        cursor = conn.cursor()
-        cursor.executemany(update_query, update_data)
-        updated_count = cursor.rowcount
-        conn.commit()
+        
+        try:
+            for batch_num in range(total_batches):
+                batch_start = batch_num * batch_size
+                batch_end = min(batch_start + batch_size, total_rows)
+                batch_df = df.iloc[batch_start:batch_end]
+                
+                print(f"Processing batch {batch_num + 1}/{total_batches} (rows {batch_start + 1}-{batch_end})...")
+                
+                # Prepare data for batch update
+                update_data = [
+                    (float(row['espn_fpts']), float(row['nba_salary_cap_fpts']), row['player_url'], row['G']) 
+                    for _, row in batch_df.iterrows()
+                ]
+                
+                # Execute batch update
+                cursor.executemany(update_query, update_data)
+                updated_count += len(update_data)
+                
+                # Commit after each batch to avoid long transactions
+                conn.commit()
+                print(f"  Committed {len(update_data)} rows. Progress: {updated_count}/{total_rows} ({updated_count/total_rows*100:.1f}%)")
+                
+        except KeyboardInterrupt:
+            print("\n\nProcess interrupted by user!")
+            print(f"Processed {updated_count} out of {total_rows} rows.")
+            conn.commit()
         
         # Verify the update
         print("Verifying updates...")
@@ -171,7 +208,9 @@ def calculate_fantasy_points():
         import traceback
         print(f"Full stack trace:\n{traceback.format_exc()}")
     finally:
-        conn.close()
+        if 'conn' in locals() and conn:
+            conn.close()
+            print("Database connection closed")
         
     print("Done with calculate_fantasy_points!")
 
